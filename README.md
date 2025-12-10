@@ -137,8 +137,6 @@ This tool was developed as part of research into sustainable autonomous marine o
    - Outputs performance metrics and plots.  
 
 [//]: # (## References)
-[//]: # (For scientific background, see:)  
-[//]: # (*WEC-AUV Paper 2025.txt* (included in this repository))
 
 ## Contact
 
