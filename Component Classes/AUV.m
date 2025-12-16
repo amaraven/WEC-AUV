@@ -11,27 +11,7 @@ classdef AUV < handle
     % To create a AUV object named 'auv', use the following syntax. 
     % auv = AUV(model);
     % 
-    % Currently supported models include the following: 
-    % 'Iver3_27' - 27 kg model of Iver3
-    % 'Iver3_38.5' - 38.5 kg model of Iver3
-    % 'REMUS 100'
-    % case 'REMUS 300-70.3'
-    % 'REMUS 620-210' 
-    % 'REMUS 620-279' 
-    % 'REMUS 620-347'
-    % 'REMUS 6000'  
-    % 'Bluefin-9'
-    % 'Bluefin-12'
-    % 'Bluefin-21' 
-    % 'Bluefin-HAUV'
-    % 'Hugin Superior'
-    % 'Hugin Endurance'
-    % 'Hugin 3000'  
-    % 'Hugin 4500'
-    % 'Boxfish AUV'  
-    % 'Boxfish ARV-i'
-    % 'Saab Sabertooth Single'  
-    % 'Saab Sabertooth Double'
+    % Currently supported models 'A' - 'U' are generic examples
 
     properties
         model           % Model of auv (i.e. 'Iver3')
@@ -69,7 +49,7 @@ classdef AUV < handle
 
             
             switch model 
-                case 'Iver3-27'  % Source: Driscol '19
+                case 'A'  % Source: Driscol '19
                     auv.model = model;  
                     auv.mass = 27;  % Iver3 model options range from 27-38.5 kg
                     auv.missionSpecs = [1, 8*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];  % Iver3 model options range from 8-14 hrs until recharge needed
@@ -78,7 +58,7 @@ classdef AUV < handle
                     auv.chargeMethod = 1;  
                     auv.hotelLoad = 90;  
 
-                case 'Iver3-38.5'  % Source: Driscol '19
+                case 'B'  % Source: Driscol '19
                     auv.model = model;
                     auv.mass = 38.5;  % range from 27-38.5 kg
                     auv.missionSpecs = [1, 14*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];  % range from 8-14 hrs
@@ -87,7 +67,7 @@ classdef AUV < handle
                     auv.chargeMethod = 1;
                     auv.hotelLoad = 90;  
 
-                case 'REMUS 100'  % *all UUVs* Website source: https://hii.com/what-we-do/capabilities/unmanned-systems/remus-uuvs/
+                case 'C'  % *all UUVs* Website source: https://hii.com/what-we-do/capabilities/unmanned-systems/remus-uuvs/
                     auv.model = model;
                     auv.mass = 38.6;
                     auv.missionSpecs = [1, 10*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -96,7 +76,7 @@ classdef AUV < handle
                     auv.chargeMethod = 1;
                     auv.hotelLoad = 90;  
 
-                case 'REMUS 300-58.5'  % 4
+                case 'D'  % 4
                     auv.model = model;
                     auv.mass = 58.5;
                     auv.missionSpecs = [1, 20*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -104,7 +84,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
-                case 'REMUS 300-70.3'  % 5
+                case 'E'  % 5
                     auv.model = model;
                     auv.mass = 70.3;
                     auv.missionSpecs = [1, 30*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -112,7 +92,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
-                case 'REMUS 620-210'  % 6
+                case 'F'  % 6
                     auv.model = model;
                     auv.mass = 210;
                     auv.missionSpecs = [1, 42*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -120,7 +100,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
-                case 'REMUS 620-279'  % 7
+                case 'G'  % 7
                     auv.model = model;
                     auv.mass = 279;
                     auv.missionSpecs = [1, 80*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -128,7 +108,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 10;
                     auv.chargeMethod = 1;
 
-                case 'REMUS 620-347'
+                case 'H'
                     auv.model = model;
                     auv.mass = 347;
                     auv.missionSpecs = [1, 110*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -136,7 +116,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 12;
                     auv.chargeMethod = 1;
 
-                case 'REMUS 6000'  %9
+                case 'I'  %9
                     auv.model = model;
                     auv.mass = 1630;
                     auv.missionSpecs = [1, 25*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -144,7 +124,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 24;
                     auv.chargeMethod = 1;
 
-                case 'Bluefin-9'
+                case 'J'
                     auv.model = model;
                     auv.mass = 70;
                     auv.missionSpecs = [1, 8*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -152,7 +132,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
-                case 'Bluefin-12'
+                case 'K'
                     auv.model = model;
                     auv.mass = 250;
                     auv.missionSpecs = [1, 36*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -160,7 +140,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
-                case 'Bluefin-21'  % 12
+                case 'L'  % 12
                     auv.model = model;
                     auv.mass = 750;
                     auv.missionSpecs = [1, 25*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -168,7 +148,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;  
 
-                case 'Bluefin-HAUV'
+                case 'M'
                     auv.model = model;
                     auv.mass = 72.6;
                     auv.missionSpecs = [1, 3.5*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -176,7 +156,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
-                case 'Hugin Superior'  % 14
+                case 'N'  % 14
                     auv.model = model;
                     auv.mass = 2200;
                     auv.missionSpecs = [1, 72*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -184,7 +164,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
-                case 'Hugin Endurance'
+                case 'O'
                     auv.model = model;
                     auv.mass = 8000;
                     auv.missionSpecs = [1, 360*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -192,7 +172,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
-                case 'Hugin 3000'  % 16
+                case 'P'  % 16
                     auv.model = model;
                     auv.mass = 1000;
                     auv.missionSpecs = [1, 24*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -200,7 +180,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
-                case 'Hugin 4500'
+                case 'Q'
                     auv.model = model;
                     auv.mass = 1550;
                     auv.missionSpecs = [1, 74*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -208,7 +188,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
-                case 'Boxfish AUV'  % 18
+                case 'R'  % 18
                     auv.model = model;
                     auv.mass = 25;
                     auv.missionSpecs = [1, 10*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -217,7 +197,7 @@ classdef AUV < handle
                     auv.chargeMethod = 1;
                     auv.hotelLoad = 1;  % [W] from email correspondance with boxfish
 
-                case 'Boxfish ARV-i'
+                case 'S'
                     auv.model = model;
                     auv.mass = 28;
                     auv.missionSpecs = [1, 10*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -225,7 +205,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 4;
                     auv.chargeMethod = 2;
 
-                case 'Saab Sabertooth Single'  %20
+                case 'T'  %20
                     auv.model = model; 
                     auv.mass = 650;
                     auv.missionSpecs = [1, 10.8*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
@@ -233,7 +213,7 @@ classdef AUV < handle
                     auv.chargeRate = auv.maxBattery / 3.64;
                     auv.chargeMethod = 1;
 
-                case 'Saab Sabertooth Double'
+                case 'U'
                     auv.model = model; 
                     auv.mass = 1300;
                     auv.missionSpecs = [1, 21.6*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];

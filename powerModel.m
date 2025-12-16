@@ -31,7 +31,7 @@
 % * AUV dock hotel load: Default is 20 W
 %
 % OUTPUTS: 
-% * Fleet number: Number of AUVs that can be supported by the WEC
+% * Fleet size: Number of AUVs that can be supported by the WEC
 % * Central battery size: size of the central battery required 
 % * AUV mission schedule: Example schedule of AUV missions and recharge
 % periods
@@ -52,7 +52,7 @@ addpath('Component Classes');
 addpath('Functions');
 addpath('InputData');
 
-auvModels = [{'Iver3-27'}, {'Iver3-38.5'}, {'REMUS 100'}, {'REMUS 300-58.5'}, {'REMUS 300-70.3'}, {'REMUS 620-210'}, {'REMUS 620-279'}, {'REMUS 620-347'}, {'REMUS 6000'}, {'Bluefin-9'}, {'Bluefin-12'}, {'Bluefin-21'}, {'Bluefin-HAUV'}, {'Hugin Superior'}, {'Hugin Endurance'}, {'Hugin 3000'}, {'Hugin 4500'}, {'Boxfish AUV'}, {'Boxfish ARV-i'}, {'Saab Sabertooth Single'}, {'Saab Sabertooth Double'}];
+auvModels = [{'A'}, {'B'}, {'C'}, {'D'}, {'E'}, {'F'}, {'G'}, {'H'}, {'I'}, {'J'}, {'K'}, {'L'}, {'M'}, {'N'}, {'O'}, {'P'}, {'Q'}, {'R'}, {'S'}, {'T'}, {'U'}];
 
 %% User-Defined Inputs / Model Setup
 
@@ -126,7 +126,7 @@ else
             wec = WEC('generic');
     
         case 'WEC Power Gen / Wave Resource'
-            auvModelNum = listdlg('PromptString',{'Choose AUV model.'}, 'SelectionMode', 'single','ListString', {'Iver3-27','Iver3-38.5', 'REMUS 100', 'REMUS 300-58.5', 'REMUS 300-70.3', 'REMUS 620-210', 'REMUS 620-279', 'REMUS 620-347', 'REMUS 6000', 'Bluefin-9', 'Bluefin-12', 'Bluefin-21', 'Bluefin-HAUV', 'Hugin Superior', 'Hugin Endurance', 'Hugin 3000', 'Hugin 4500', 'Boxfish AUV', 'Boxfish ARV-i'});
+            auvModelNum = listdlg('PromptString',{'Choose AUV model.'}, 'SelectionMode', 'single','ListString', {'A','B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S','T','U'});
             auv = AUV(auvModels{auvModelNum}); 
 
     end
@@ -149,7 +149,7 @@ simTime = (dtSec:dtSec:simSec)' / 60 / 60;  % [hr]
 
 switch resourceDataType
     case 1  % 'Proteus struct containing power generated during different sea states'
-        load('inputData/data.mat', 'RM3'); % Time series output of proteus WEC model for a single point absorber with no dock attached. (Other variables include F3B 'floating third body', WECM 'wec mounted', and SBM 'sea bottom mounted', all referring to auv dock mount location.)
+        load('inputData/RM3_seaState_Power.mat', 'RM3'); % Time series output of proteus WEC model for a single point absorber with no dock attached. (Other variables include F3B 'floating third body', WECM 'wec mounted', and SBM 'sea bottom mounted', all referring to auv dock mount location.)
 
         if strcmp(depVar, 'AUV Model') && userPrompts == 1
             % Prompt for sea state
@@ -179,26 +179,11 @@ switch resourceDataType
                 'ListString',{vars.name});
 
     case 3  % 'Value of mean power'
-        % Generates generic mean power using example data:
-        %{
-        load('inputData/data.mat', 'RM3'); % Time series output of proteus WEC model for a single point absorber with no dock attached. (Other variables include F3B 'floating third body', WECM 'wec mounted', and SBM 'sea bottom mounted', all referring to auv dock mount location.)
-
-        % ~< input dialog for mean power >~ but for now... 
-
-        switch depVar
-            case 'AUV Model' 
-                meanPower = RM3(3).Pmean;
-
-            case 'WEC Power Gen / Wave Resource'
-                meanPower = [RM3.Pmean];  
-        end
-        %}
         meanPower = input('Enter mean power generated as a single value or a bracketed, comma-seperated list: ');
 
     case 4  % Time series of wave specs (Hs, Te, Tp)
         switch depVar
             case 'AUV Model'
-                % load('inputData/Hawaii_Wave_Hindcast_Data_NREL.csv');  % generic example
                 dataFile = uigetfile('*.csv', 'Select *.csv Data File', 'MultiSelect','off');
                 dataTable = readtable(dataFile,'VariableNamingRule','modify');
 
@@ -306,12 +291,12 @@ switch depVar
                 wec.powerGenMeans = ones(size(simTime)) * wec.meanPowerGen; 
 
             case 4
-                wec.calcPowerGen(dataTable,'meanPwr', simTime, 1, 403); %%%%%%%%%%%%%%%%%%%%%%%%%%% reset windowOverrideIndx to 0 to pull mean power from time series %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                wec.calcPowerGen(dataTable,'meanPwr', simTime, 0, 0); %% set windowOverrideIndx to 403 (and use Oregon dataset) to replicate paper results 
 
                 modOut.dataIn = dataFile; 
 
             case 5  
-                wec.calcPowerGen(waveSpecTable(1,:), [], simTime, 0, 0);  % If multiple sets of wave specifications is given, runs simulation with first set only
+                wec.calcPowerGen(waveSpecTable(1,:), [], simTime, 0, 0);  % If multiple sets of wave specifications are given, runs simulation with first set only
                 wec.lowPowerGen = 0.75*wec.meanPowerGen; 
                 wec.powerGenMeans = ones(size(simTime)) * wec.meanPowerGen;
                 
@@ -362,7 +347,7 @@ switch depVar
                 
                 % Calc power gen. for all  cases simultaneously
                 wec = WEC('generic');
-                wec.calcPowerGen(waveSpecTable, [], simTime, 0);  
+                wec.calcPowerGen(waveSpecTable, [], simTime, 0, 0);  
 
                 modOut.meanPowerGen = wec.meanPowerGen;
                 modOut.dataIn = waveSpecTable;
@@ -380,7 +365,7 @@ if userDefinedBattery == 1
     energyStorage = EnergyStorage(energyStorageSize, 10, 20); 
 
 elseif userDefinedBattery == 0
-    energyStorage = EnergyStorage([], 10, 20);  % Empty battery storage will be rewritten after fleet number determination...
+    energyStorage = EnergyStorage([], 10, 20);  % Empty battery storage will be rewritten after fleet size determination...
 
 else
     error('"userDefinedBattery" out of expected range')
@@ -449,7 +434,7 @@ for depVarCount = 1:loopLength
                     dataTable = readtable(dataFiles{depVarCount},'VariableNamingRule','modify');
                        
                     % Calculate power generation
-                    wec.calcPowerGen(dataTable,'meanPwr', simTime, 0);
+                    wec.calcPowerGen(dataTable,'meanPwr', simTime, 0, 0);
 
                 case 5
                     % Clear Variables
@@ -483,26 +468,26 @@ for depVarCount = 1:loopLength
     end
     
 
-    %% Fleet number calculation
+    %% Fleet size calculation
     runFleetCalc = 1;
     fleetCalcCount = 0;
     while runFleetCalc == 1
         fleetCalcCount = fleetCalcCount + 1;
 
         if fleetCalcCount > 1
-            modOut.fleetNumber(depVarCount) = modOut.fleetNumber(depVarCount) - 1;
+            modOut.fleetSize(depVarCount) = modOut.fleetSize(depVarCount) - 1;
 
             % clear values from prev simulation
             clear modOut.energyStorageBatteryLvl modOut.wecBatteryLvl modOut.auvBatteryLvl modOut.auvSchedule modOut.auvTimeOnMission
 
         else
-            modOut.fleetNumber(depVarCount) = calcFleetNum(wec, auv, energyStorage, maxFleetSize);  % initial calculation
+            modOut.fleetSize(depVarCount) = calcFleetSize(wec, auv, energyStorage, maxFleetSize);  % initial calculation
 
         end
         
         
         %% Update central storage hotel load to account for additional AUV docks
-        energyStorage.hotelLoad = energyStorage.baseHotelLoad + energyStorage.dockHotelLoad*(modOut.fleetNumber(depVarCount)); 
+        energyStorage.hotelLoad = energyStorage.baseHotelLoad + energyStorage.dockHotelLoad*(modOut.fleetSize(depVarCount)); 
 
 
         %% Calculate minimum central battery, for battery to not limit fleet
@@ -513,11 +498,11 @@ for depVarCount = 1:loopLength
         wec.calcLowPower(resourceDataType, dt, auv); 
 
         lowPowerOverflow = wec.lowPowerGen -  wec.hotelLoad/(wec.n_battery^2);  % Assumes wec is already at max battery
-        minBattery = ( auv.chargeLoad(auv.mission)*modOut.fleetNumber(depVarCount)/energyStorage.n_battery + auv.chargeTime(auv.mission)*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTransfer - lowPowerOverflow*auv.chargeTime(auv.mission)*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  ) *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
+        minBattery = ( auv.chargeLoad(auv.mission)*modOut.fleetSize(depVarCount)/energyStorage.n_battery + auv.chargeTime(auv.mission)*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTransfer - lowPowerOverflow*auv.chargeTime(auv.mission)*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  ) *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
 
         if minBattery < 0  % Somewhat arbituary minimum battery if pGen > operating loads
             warning('Problem with minimum battery calculation. Using default value for this simulation.')
-            minBattery = 0.25 * ( auv.chargeLoad(auv.mission)*modOut.fleetNumber(depVarCount)/energyStorage.n_battery + auv.chargeTime(auv.mission)*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTransfer ); 
+            minBattery = 0.25 * ( auv.chargeLoad(auv.mission)*modOut.fleetSize(depVarCount)/energyStorage.n_battery + auv.chargeTime(auv.mission)*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTransfer ); 
         end
  
         % Clear battery storage for new simulation if battery amount is not user-input
@@ -525,7 +510,7 @@ for depVarCount = 1:loopLength
             energyStorage.maxBattery = minBattery;  % set central battery to minimum needed for AUV fleet
 
         elseif energyStorage.maxBattery < minBattery
-            warning('Central energy storage amount is likely too low to support the fleet of %f %s AUV(s) determined by the given wave resource. Consider increasing central battery from %f to %f kWh.', modOut.fleetNumber, auv.model, energyStorage.maxBattery*10e-3, minBattery*10e-3)
+            warning('Central energy storage amount is likely too low to support the fleet of %f %s AUV(s) determined by the given wave resource. Consider increasing central battery from %f to %f kWh.', modOut.fleetSize, auv.model, energyStorage.maxBattery*10e-3, minBattery*10e-3)
         
         elseif minBattery < energyStorage.maxBattery 
             warning('Central energy storage is %f kWh larger than what is required for this configuration.', (energyStorage.maxBattery - minBattery)*10e-3)
@@ -534,14 +519,14 @@ for depVarCount = 1:loopLength
 
 
         % Build fleet & run model if possible
-        if modOut.fleetNumber(depVarCount) > 0
+        if modOut.fleetSize(depVarCount) > 0
     
             % Build fleet
             switch depVar
                 case 'AUV Model'
-                    auvFleet = arrayfun(@(x) AUV(auvModels{depVarCount}), 1:modOut.fleetNumber(depVarCount), 'UniformOutput', false);  
+                    auvFleet = arrayfun(@(x) AUV(auvModels{depVarCount}), 1:modOut.fleetSize(depVarCount), 'UniformOutput', false);  
                 case 'WEC Power Gen / Wave Resource'
-                    auvFleet = arrayfun(@(x) AUV(auvModels{auvModelNum}), 1:modOut.fleetNumber(depVarCount), 'UniformOutput', false);
+                    auvFleet = arrayfun(@(x) AUV(auvModels{auvModelNum}), 1:modOut.fleetSize(depVarCount), 'UniformOutput', false);
             end
 
             modOut.auvFleet{depVarCount} = auvFleet;  % save to model output object. 
@@ -562,12 +547,12 @@ for depVarCount = 1:loopLength
             
             % Time 'on-mission' within performance calculation domain in the case of staggered deployments (excluding time AUVs are artificially held at dock)
             if modOut.incorpStagger == 1 
-                if modOut.fleetNumber(depVarCount) == 1
+                if modOut.fleetSize(depVarCount) == 1
                     modOut.auvTimeOnMissionCorrected{depVarCount} = modOut.auvTimeOnMission{depVarCount};
                     
                 else
-                    staggerHours = (modOut.auvFleet{1,depVarCount}{1,1}.missionSpecs(2) + modOut.auvFleet{1,depVarCount}{1,1}.chargeTime) / modOut.fleetNumber(depVarCount);
-                    staggerPreliminaryTime = (modOut.fleetNumber(depVarCount) - 1) * staggerHours;
+                    staggerHours = (modOut.auvFleet{1,depVarCount}{1,1}.missionSpecs(2) + modOut.auvFleet{1,depVarCount}{1,1}.chargeTime) / modOut.fleetSize(depVarCount);
+                    staggerPreliminaryTime = (modOut.fleetSize(depVarCount) - 1) * staggerHours;
                     [~, preDomainIndx] = min(abs(modOut.simTime - staggerPreliminaryTime));
 
                     modOut.auvTimeOnMissionCorrected{depVarCount} = sum((modOut.auvSchedule{depVarCount}(preDomainIndx+1:end, :) == 1) * dt);  % Exclude on-mission time before all AUVs are deployed
@@ -579,8 +564,8 @@ for depVarCount = 1:loopLength
 
             % if last auv only went on one mission, and first auv went on more, OR central battery dropped below 0 (even with battery saver) auvFleet is too large by at least 1
             if ( (modOut.auvTimeOnMission{depVarCount}(1,end) - (auvFleet{end}.chargeTime(auvFleet{end}.mission) + auvFleet{end}.missionSpecs(auvFleet{end}.mission, 2)) ) <= 0 ) && ((modOut.auvTimeOnMission{depVarCount}(1,1) - (auvFleet{1}.chargeTime(auvFleet{1}.mission) + auvFleet{1}.missionSpecs(auvFleet{1}.mission, 2)) ) > 0 ) || any(modOut.energyStorageBatteryLvl(:,depVarCount) < 0)
-                runFleetCalc = 1;  % re-run fleet number calculation. (Disable to plot results for systems with too-many AUVs)  %%%%%%%%%%%%%%%%%%%%%%%%% RESET TO 1 %%%%%%%%%%%%%%%%%%%%%%%%%%%
-                warning('Sorry, our initial %s fleet number estimate of %f was too high. Re-running the simulation now...', auv.model, modOut.fleetNumber(depVarCount))
+                runFleetCalc = 1;  % re-run fleet size calculation. (Disable to plot results for systems with too-many AUVs)  
+                warning('Sorry, our initial %s fleet size estimate of %f was too high. Re-running the simulation now...', auv.model, modOut.fleetSize(depVarCount))
         
             else
                 runFleetCalc = 0;

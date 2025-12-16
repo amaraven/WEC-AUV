@@ -177,6 +177,8 @@ classdef WEC < handle
 
                 if plotPwrGen == 1
                     %% Plot Power Generation during simulation window 
+                    set(groot, 'defaultTextInterpreter','latex'); set(groot, 'defaultAxesTickLabelInterpreter','latex'); set(groot, 'defaultLegendInterpreter','latex');
+
                     if windowOverrideIndx == 0
                         tempDatetimes = interp1(dataTimeWindowed, dataDateTimes(indx-(0.5*window)+1 : indx + (0.5*window)+1), simTime);  
                     else

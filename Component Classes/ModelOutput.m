@@ -23,7 +23,7 @@ classdef ModelOutput < handle
         maxFleetSize        % 0 - No maximum fleet size imposed. <nonzero> - maximum AUV fleet size
 
         % Model Output Properties
-        fleetNumber         % (1xm) Array with number of AUVs in fleet for each test case
+        fleetSize         % (1xm) Array with number of AUVs in fleet for each test case
         auvMissionLength    % [hr] Could be 1x1 or 1xm depending on if mission length changes between test cases
         ratePwrUsed         % [W] Rate AUV uses power (power used during mission + recharge [Wh] / mission + recharge time [h])
         energyStorageBatteryLvl  % [Wh] Battery level of central energy storage as a function of time with rows corresponding to time steps and columns corresponding to test cases
@@ -50,7 +50,7 @@ classdef ModelOutput < handle
 
             switch depVar
                 case 'AUV Model'
-                    modOut.auvModels = [{'Iver3-27'}, {'Iver3-38.5'}, {'REMUS 100'}, {'REMUS 300-58.5'}, {'REMUS 300-70.3'}, {'REMUS 620-210'}, {'REMUS 620-279'}, {'REMUS 620-347'}, {'REMUS 6000'}, {'Bluefin-9'}, {'Bluefin-12'}, {'Bluefin-21'}, {'Bluefin-HAUV'}, {'Hugin Superior'}, {'Hugin Endurance'}, {'Hugin 3000'}, {'Hugin 4500'}, {'Boxfish AUV'}, {'Boxfish ARV-i'}, {'Saab Sabertooth Single'}, {'Saab Sabertooth Double'}];
+                    modOut.auvModels = [{'A'}, {'B'}, {'C'}, {'D'}, {'E'}, {'F'}, {'G'}, {'H'}, {'I'}, {'J'}, {'K'}, {'L'}, {'M'}, {'N'}, {'O'}, {'P'}, {'Q'}, {'R'}, {'S'}, {'T'}, {'U'}];
                 
                 case 'WEC Power Gen / Wave Resource'
                 case 'Battery Specs'
@@ -86,7 +86,7 @@ classdef ModelOutput < handle
                 % Plot battery data
                 xlabel('Simulation Time [h]');  grid on;
                 yyaxis left; ylabel('AUV Battery Level(s) [Wh]'); hold on; xlim([0,170]);
-                for auvNum = 1:modOut.fleetNumber(figNum)
+                for auvNum = 1:modOut.fleetSize(figNum)
                     plot(modOut.simTime, modOut.auvBatteryLvl{figNum}(:,auvNum)); 
                 end
                 map = [61 32 44; 120 63 87; 35 87 137; 80 145 145; 91 140 90; 162 154 58; 252 171 16; 219 110 48; 202 80 64; 185 49 79]/255;
@@ -94,7 +94,7 @@ classdef ModelOutput < handle
                 yyaxis right; plot(modOut.simTime, modOut.energyStorageBatteryLvl(:, figNum),'k','LineWidth',1); ylabel('Central Battery Level [Wh]'); 
                 ax = gca; % Get current axes
                 ax.YColor = 'k'; % Set the color of the right y-axis label and ticks to black % plot(modOut.simTime, modOut.wecBatteryLvl(:, figNum));
-                legend([string(num2cell(1:modOut.fleetNumber(figNum))), 'Central Battery'], 'Location','northeast');
+                legend([string(num2cell(1:modOut.fleetSize(figNum))), 'Central Battery'], 'Location','northeast');
             end
         
         end  % battery track plot fn
@@ -106,7 +106,7 @@ classdef ModelOutput < handle
             %mission' between test cases. 
             set(groot, 'defaultTextInterpreter','latex'); set(groot, 'defaultAxesTickLabelInterpreter','latex'); set(groot, 'defaultLegendInterpreter','latex');
     
-            for i = 1:length(modOut.fleetNumber)  % For each system in the simulation batch  
+            for i = 1:length(modOut.fleetSize)  % For each system in the simulation batch  
                     t_m = modOut.auvFleet{1,i}{1,1}.missionSpecs(2); 
                     t_r = modOut.auvFleet{1,i}{1,1}.chargeTime;
                     t_c(i) = t_m+t_r;
@@ -115,7 +115,7 @@ classdef ModelOutput < handle
             % Calc aggregate time spent 'on-mission' and determine domain
             if modOut.incorpStagger == 1
                 totalTimeOnMission = cellfun(@sum, modOut.auvTimeOnMissionCorrected);
-                domainTime = (modOut.simTime(end) - max((modOut.fleetNumber-1).*(t_c)/modOut.fleetNumber, 0) );
+                domainTime = (modOut.simTime(end) - max((modOut.fleetSize-1).*(t_c)/modOut.fleetSize, 0) );
             
             else  % no stagger incorporated...
                 totalTimeOnMission = cellfun(@sum, modOut.auvTimeOnMission);
@@ -124,8 +124,8 @@ classdef ModelOutput < handle
             end
 
 
-            % Plot time on-mission vs Normalized Power w/ Fleet Number color bar 
-            figure; scatter(modOut.ratePwrUsed./modOut.meanPowerGen, 100*totalTimeOnMission./domainTime, [], modOut.fleetNumber);
+            % Plot time on-mission vs Normalized Power w/ Fleet Size color bar 
+            figure; scatter(modOut.ratePwrUsed./modOut.meanPowerGen, 100*totalTimeOnMission./domainTime, [], modOut.fleetSize);
             grid on; xlabel('AUV Power Use Normalized to Mean Power Gen.','Interpreter','latex'); ylabel('Relative Working Hours','Interpreter','latex'); 
             switch modOut.depVar
                 case 'AUV Model'
@@ -142,16 +142,16 @@ classdef ModelOutput < handle
             end
             colorbar; map = [61 32 44; 120 63 87; 35 87 137; 80 145 145; 91 140 90; 162 154 58; 252 171 16; 219 110 48; 202 80 64; 185 49 79]; colormap(map/255)
             c = colorbar; % Create the colorbar
-            c.Label.String = 'Fleet Number'; c.Label.Interpreter = 'lat'; % Assign the colorbar label and use LaTeX as interpreter
+            c.Label.String = 'Fleet Size'; c.Label.Interpreter = 'lat'; % Assign the colorbar label and use LaTeX as interpreter
 
 
-            % Plot NORMALIZED time on-mission vs Normalized Power w/ Fleet Number ccolor bar ----------------------
-            maxAggregateTime = zeros(size(modOut.fleetNumber));  % preallocate
-            for i = 1:length(modOut.fleetNumber)  % For each system in the simulation batch  
+            % Plot NORMALIZED time on-mission vs Normalized Power w/ Fleet Size color bar ----------------------
+            maxAggregateTime = zeros(size(modOut.fleetSize));  % preallocate
+            for i = 1:length(modOut.fleetSize)  % For each system in the simulation batch  
                     t_m = modOut.auvFleet{1,i}{1,1}.missionSpecs(2); 
 
                     if modOut.incorpStagger == 1
-                        t_auvDomain = modOut.simTime(end) - ((t_c(i))/modOut.fleetNumber(i))*[0:1:(modOut.fleetNumber(i)-1)];  % Time from initial deployment of AUV to the end of the simulation
+                        t_auvDomain = modOut.simTime(end) - ((t_c(i))/modOut.fleetSize(i))*[0:1:(modOut.fleetSize(i)-1)];  % Time from initial deployment of AUV to the end of the simulation
         
                         % For each auv, how many mission+recharge cycles can they complete from the time they are first deployed to the simulation-end
                         numCycles = t_auvDomain./(t_c(i));
@@ -160,7 +160,7 @@ classdef ModelOutput < handle
                         max_time_onMission_prelim(cases) = floor(numCycles(cases)).*t_m+ ( (numCycles(cases) - floor(numCycles(cases))) / (t_m/(t_c(i))) )*t_m;  % If remainder is < mission time
         
                         % For each auv, track time spent on-mission before the start of the domain (once all AUVs have been deployed)
-                        t_auvTimeSubtract = ((t_c(i))/modOut.fleetNumber(i)) * flip([0:1:(modOut.fleetNumber(i)-1)]);  % max_time_onMission_prelim included C*(N-1) extra hours for the first auv, C*(N-1)-1 extra hours for the second...etc with C = time between deployments, and N = fleet size
+                        t_auvTimeSubtract = ((t_c(i))/modOut.fleetSize(i)) * flip([0:1:(modOut.fleetSize(i)-1)]);  % max_time_onMission_prelim included C*(N-1) extra hours for the first auv, C*(N-1)-1 extra hours for the second...etc with C = time between deployments, and N = fleet size
                         t_auvTimeSubtract(t_auvTimeSubtract >= t_m) = t_m; 
         
                         % Final maximum time AUVs could spend on-mission
@@ -174,13 +174,13 @@ classdef ModelOutput < handle
                             max_time_onMission = floor(numCycles).*t_m + t_m;  % if remainder is > mission time
                         end
                         
-                        maxAggregateTime(i) = max_time_onMission*modOut.fleetNumber(i);
+                        maxAggregateTime(i) = max_time_onMission*modOut.fleetSize(i);
 
                     end
             end
                           
-            figure; scatter(modOut.ratePwrUsed./modOut.meanPowerGen, 100*totalTimeOnMission./(maxAggregateTime), [], modOut.fleetNumber); ylabel('Deployment Efficiency Percentage') % Deployment Efficiency (realized / nominal time on-mission
-            % figure; scatter(modOut.ratePwrUsed./modOut.meanPowerGen, 100*totalTimeOnMission./(domainTime.*modOut.fleetNumber), [], modOut.fleetNumber);  ylabel('Normalized \% On','Interpreter','latex');  % time on-mission / total time
+            figure; scatter(modOut.ratePwrUsed./modOut.meanPowerGen, 100*totalTimeOnMission./(maxAggregateTime), [], modOut.fleetSize); ylabel('Deployment Efficiency Percentage') % Deployment Efficiency (realized / nominal time on-mission
+            % figure; scatter(modOut.ratePwrUsed./modOut.meanPowerGen, 100*totalTimeOnMission./(domainTime.*modOut.fleetSize), [], modOut.fleetSize);  ylabel('Normalized \% On','Interpreter','latex');  % time on-mission / total time
             grid on; xlabel('AUV Power Use Normalized to Mean Power Gen.','Interpreter','latex');
             switch modOut.depVar
                 case 'AUV Model'
@@ -198,7 +198,7 @@ classdef ModelOutput < handle
             colorbar; map = [61 32 44; 120 63 87; 35 87 137; 80 145 145; 91 140 90; 162 154 58; 252 171 16; 219 110 48; 202 80 64; 185 49 79]; colormap(map/255)
             c = colorbar; % Create the colorbar
             % Set the colorbar label
-            c.Label.String = 'Fleet Number'; c.Label.Interpreter = 'lat'; % Assign the label and use LaTeX as interpreter
+            c.Label.String = 'Fleet Size'; c.Label.Interpreter = 'lat'; % Assign the label and use LaTeX as interpreter
 
 
             % Plot time spent on mission against AUV model labels
