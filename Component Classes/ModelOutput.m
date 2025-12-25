@@ -35,6 +35,10 @@ classdef ModelOutput < handle
         auvModels           % Model(s) of auv used for simulation
         auvFleet            % Struct array containing auv fleet for each test case
     end
+
+    properties (Hidden = true)
+        fleetNumber         % Legacy variable name for fleetSize, needed to read old data
+    end
     
     
     %% Instance Methods (need object as an input)
@@ -106,6 +110,10 @@ classdef ModelOutput < handle
             %mission' between test cases. 
             set(groot, 'defaultTextInterpreter','latex'); set(groot, 'defaultAxesTickLabelInterpreter','latex'); set(groot, 'defaultLegendInterpreter','latex');
     
+            if isempty(modOut.fleetSize)
+                modOut.fleetSize = modOut.fleetNumber; 
+            end
+            
             for i = 1:length(modOut.fleetSize)  % For each system in the simulation batch  
                     t_m = modOut.auvFleet{1,i}{1,1}.missionSpecs(2); 
                     t_r = modOut.auvFleet{1,i}{1,1}.chargeTime;
@@ -279,4 +287,3 @@ classdef ModelOutput < handle
 
     end  % methods
 end  % class
-

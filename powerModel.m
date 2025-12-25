@@ -68,10 +68,7 @@ if userPrompts == 0
     incorpStagger = 1;  % (1) Incorporate stagger into AUV mission scheduling
     maxFleetSize = 0;  % Maximum size for AUV fleet, set to 0 for no maximum
 
-    userDefinedBattery = 0;  % 1 - User inputs total battery capacity, 0 - model outputs battery capacity to support max auv's
-    if userDefinedBattery == 1
-        energyStorageSize = 4200;
-    end
+    userDefinedBattery = 0; %4200;  % 0 - model outputs battery capacity to support max auv's, ~=0 - is the user input central battery capacity
 
     switch depVar       
         case 'AUV Model'  
@@ -79,11 +76,9 @@ if userPrompts == 0
                 seaState = 3; 
             end  
        
-            wec = WEC('generic'); 
-
         case 'WEC Power Gen / Wave Resource'  % Pick one auv model, run through all sea states
             auvModelNum = 18; 
-            auv = AUV(string(auvModels(auvModelNum))); 
+            auv = AUV(auvModels{auvModelNum}); 
     end
 
     % ---------------------------------------------------------------------
@@ -105,14 +100,20 @@ else
 
     
     % Central Battery Size
-    energyStorageSize = input('Enter the desired central battery size [Wh], or leave blank to use an ideal battery size based on the wave resource: ');
-    
-    if isempty(energyStorageSize) || energyStorageSize == 0
-        userDefinedBattery = 0; 
-    
-    else
-        userDefinedBattery = 1;
+    udfTryAgain = 1;
+    while udfTryAgain == 1
+        userDefinedBattery = input('Enter the desired central battery size [Wh], or leave blank to use an ideal battery size based on the wave resource: ');
+        
+        if isempty(userDefinedBattery)
+            userDefinedBattery = 0; 
+            udfTryAgain = 0;
 
+        elseif ~isnumeric(userDefinedBattery)  % if user-input is NOT numeric..
+            udfTryAgain = 1;
+            warning('Central battery size must be empty or numeric.')
+        else
+            udfTryAgain = 0;
+        end
     end
 
     
@@ -120,15 +121,9 @@ else
     depVar = questdlg('Choose variable to evaluate and change betweeen simulations.','Dependant Variable', ...
         'AUV Model','WEC Power Gen / Wave Resource', 'AUV Model'); 
     
-    switch depVar
-        case 'AUV Model'
-            % Generate WEC & AUV Objects
-            wec = WEC('generic');
-    
-        case 'WEC Power Gen / Wave Resource'
+    if strcmp(depVar, 'WEC Power Gen / Wave Resource')
             auvModelNum = listdlg('PromptString',{'Choose AUV model.'}, 'SelectionMode', 'single','ListString', {'A','B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S','T','U'});
             auv = AUV(auvModels{auvModelNum}); 
-
     end
     
     
@@ -138,333 +133,93 @@ else
 
 end
 
-% Simulation parameters from user-inputs 
-simSec = simHrs * 60 * 60; 
-dtSec = 30.0;  % [s]
-dt = dtSec/60/60;  % [hr]
-simTime = (dtSec:dtSec:simSec)' / 60 / 60;  % [hr]
+dtSec = 30.0;  % [s]  % no prompt for this (yet) but is a model input
+
+if strcmp(depVar, 'AUV Model')
+    modIn = ModelInput(simHrs, depVar, resourceDataType, incorpStagger, maxFleetSize, userDefinedBattery, dtSec, auvModels);
+elseif strcmp(depVar, 'WEC Power Gen / Wave Resource')
+    modIn = ModelInput(simHrs, depVar, resourceDataType, incorpStagger, maxFleetSize, userDefinedBattery, dtSec, auvModels{auvModelNum});
+else
+    error('Unknown dependent variable')
+end
+
 
 
 % Load Resource Data
-
-switch resourceDataType
-    case 1  % 'Proteus struct containing power generated during different sea states'
-        load('inputData/RM3_seaState_Power.mat', 'RM3'); % Time series output of proteus WEC model for a single point absorber with no dock attached. (Other variables include F3B 'floating third body', WECM 'wec mounted', and SBM 'sea bottom mounted', all referring to auv dock mount location.)
-
-        if strcmp(depVar, 'AUV Model') && userPrompts == 1
-            % Prompt for sea state
-            seaState = listdlg('PromptString',{'Specify the sea state you would like to use for this simulation'}, 'SelectionMode','single', ...
-                'ListString',{'1','2','3','4','5','6','7','8','9','10'});
-        end
-        
-    case 2  % 'Time series of power generated'
-        switch depVar
-            case 'AUV Model'
-                dataFiles = uigetfile('*.mat', 'Select *.mat data file for time series','MultiSelect','off');
-                vars = whos('-file', dataFiles);
-    
-            case 'WEC Power Gen / Wave Resource' 
-                dataFiles = uigetfile('*.mat', 'Select *.mat data files','MultiSelect','on');
-                if ischar(dataFiles)  % if only one is selected
-                    dataFiles = {dataFiles};
-                end
-            
-                vars = whos('-file', dataFiles{1});
-
-        end
-        
-        tIndx = listdlg('PromptString',{'Select the time series vector'}, 'SelectionMode','single', ...
-                'ListString',{vars.name});
-        pwrIndx = listdlg('PromptString',{'Select the power gen. time series'}, 'SelectionMode','single', ...
-                'ListString',{vars.name});
-
-    case 3  % 'Value of mean power'
-        meanPower = input('Enter mean power generated as a single value or a bracketed, comma-seperated list: ');
-
-    case 4  % Time series of wave specs (Hs, Te, Tp)
-        switch depVar
-            case 'AUV Model'
-                dataFile = uigetfile('*.csv', 'Select *.csv Data File', 'MultiSelect','off');
-                dataTable = readtable(dataFile,'VariableNamingRule','modify');
-
-            case 'WEC Power Gen / Wave Resource'
-                dataFiles = uigetfile('*.csv', 'Select *.csv Data Files', 'MultiSelect','on');
-                if ischar(dataFiles)
-                    dataFiles = {dataFiles};
-                end
-        end
-
-    case 5  % Mean Wave specs (Hs, Te, Tp)
-        if userPrompts == 0
-            sigWaveHeight = [1.8774    1.8800    1.9000    2.2000    1.6000]';
-            energyPeriod = [8.9367    8.9400    9.0000    9.0000    8.8000];
-            peakPeriod = [13.1428   13.1400   13.1400   13.1400   10.1000];
-
-        else
-            prompt = {'Enter significant wave height(s) [m]:', 'Enter wave energy period(s) [s]:','Enter peak period(s) [s]:'};
-            fieldsize = [1, 45; 1, 45; 1, 45];
-            definput = {'1.8774','8.9367','13.1428'};
-    
-            tryAgain = 1;  % preallocate
-            while tryAgain == 1
-                waveSpecDlg = inputdlg(prompt, 'Wave Resource Specifications', fieldsize, definput);
-                sigWaveHeight = str2num(waveSpecDlg{1});
-                energyPeriod = str2num(waveSpecDlg{2});
-                peakPeriod = str2num(waveSpecDlg{3});
-    
-                if isequal( size(sigWaveHeight), size(energyPeriod), size(peakPeriod) )
-                    tryAgain = 0;
-                else
-                    warning('Each specification must have the same number of values. Please re-enter the wave resource specifications.')
-                end
-    
-            end
-        end
-
-        waveSpecTable = table(sigWaveHeight', energyPeriod', peakPeriod','VariableNames',{'SignificantWaveHeight','EnergyPeriod','PeakPeriod'});
-
-    case 6  % Power matrix & Hs, Te time series
-        % User-Selection of file & variable names:
-        switch depVar
-            case 'AUV Model'
-                dataFiles = uigetfile('*.mat', 'Select *.mat data file for time series','MultiSelect','off');
-                vars = whos('-file', dataFiles);
-
-            case 'WEC Power Gen / Wave Resource' 
-                dataFiles = uigetfile('*.mat', 'Select *.mat data files','MultiSelect','on');
-                if ischar(dataFiles)  % if only one is selected
-                    dataFiles = {dataFiles};
-                end
-                
-                vars = whos('-file', dataFiles{1});
-
-        end
-        pMatIndx = listdlg('PromptString',{'Select the power matrix variable'}, 'SelectionMode','single', ...
-                'ListString',{vars.name});
-        tIndx = listdlg('PromptString',{'Select the time series vector'}, 'SelectionMode','single', ...
-                'ListString',{vars.name});
-        HsIndx = listdlg('PromptString',{'Select the significant wave height time series'}, 'SelectionMode','single', ...
-                'ListString',{vars.name});
-        TeIndx = listdlg('PromptString',{'Select the wave energy period time series'}, 'SelectionMode','single', ...
-                'ListString',{vars.name});
-
-end  % load resource data
+modIn.extractDataInfo;
 
 
 %% Loop Preallocation, Constant Calcs, & Output Object Generation
 
-% Generate output object
-modOut = ModelOutput(simTime, depVar, resourceDataType);
+% Generate output & WEC objects
+modOut = ModelOutput(modIn.simTime, depVar, resourceDataType);
 
 modOut.incorpStagger = incorpStagger;
 modOut.maxFleetSize = maxFleetSize;
 
-switch depVar
+wec = WEC('generic');
+
+% Calculate dependent variable loop length
+switch modIn.depVar
     case 'AUV Model'
-        
-        % Dependent variable loop spec.
-        loopLength = length(auvModels); 
-
-        % Calculate power generation...
+        loopLength = length(modIn.auvModels); 
+    case 'WEC Power Gen / Wave Resource' 
         switch resourceDataType
             case 1
-                wec.reshapePowerGen(RM3(seaState).Power, RM3(seaState).Time, simHrs, dt);  
-
-                modOut.meanPowerGen = wec.meanPowerGen;
-                modOut.seaState = seaState;
-
-            case 2
-                % Load data into workspace:
-                dataTime = load(dataFiles, vars(tIndx).name);
-                pGen_dataTime = load(dataFiles, vars(pwrIndx).name);
-
-                % Reshape power gen. to fit simulation timestep
-                wec.reshapePowerGen(pGen_dataTime, dataTime, simHrs, dt);
-                modOut.meanPowerGen = wec.meanPowerGen; 
-                modOut.dataIn = dataFiles;
-
-            case 3
-                modOut.meanPowerGen = meanPower;
-    
-                wec.meanPowerGen = modOut.meanPowerGen;
-                wec.lowPowerGen = 0.75 * wec.meanPowerGen; 
-                wec.powerGenMeans = ones(size(simTime)) * wec.meanPowerGen; 
-
-            case 4
-                wec.calcPowerGen(dataTable,'meanPwr', simTime, 0, 0); %% set windowOverrideIndx to 403 (and use Oregon dataset) to replicate paper results 
-
-                modOut.dataIn = dataFile; 
-
-            case 5  
-                wec.calcPowerGen(waveSpecTable(1,:), [], simTime, 0, 0);  % If multiple sets of wave specifications are given, runs simulation with first set only
-                wec.lowPowerGen = 0.75*wec.meanPowerGen; 
-                wec.powerGenMeans = ones(size(simTime)) * wec.meanPowerGen;
-                
-                modOut.meanPowerGen = wec.meanPowerGen;
-                modOut.dataIn = waveSpecTable;
-            
-            case 6
-                % Load data into workspace:
-                pMat = load(dataFiles, vars(pMatIndx).name);  pMat = pMat.pMat;
-                dataTime = load(dataFiles, vars(tIndx).name);  dataTime = dataTime.dataTime;
-                Hs = load(dataFiles, vars(HsIndx).name);  Hs = Hs.Hs;
-                Te = load(dataFiles, vars(TeIndx).name);  Te = Te.Te;
-        
-                % Calculate power from grid interpolation
-                pMatTableFn = griddedInterpolant( repmat(pMat(2:end,1), 1, size(pMat, 2)-1), repmat(pMat(1,2:end), size(pMat, 1)-1, 1), pMat(2:end, 2:end),'linear','nearest');  % X1 grid, X2 grid, valueMatrix, interpolation method, extrapolation method
-                pGen_dataTime = pMatTableFn(Hs, Te); 
-
-                % reshape power gen
-                wec.reshapePowerGen(pGen_dataTime, dataTime, simHrs, dt);
-                modOut.meanPowerGen = wec.meanPowerGen;
-                modOut.dataIn = dataFiles;
-
-        end
-
-    case 'WEC Power Gen / Wave Resource'
-        modOut.auvModels = auvModels{auvModelNum}; 
-
-        switch resourceDataType
-            case 1
-                % Dependent variable loop spec.
-                loopLength = length(RM3);
-
+                loopLength = length(RM3); 
             case 2
                 loopLength = length(dataFiles);
-                modOut.dataIn = dataFiles;
-                
             case 3
                 loopLength = length(meanPower);
-                modOut.meanPowerGen = meanPower;
-
             case 4
                 loopLength = length(dataFiles);
-
-                modOut.dataIn = dataFiles; 
-
             case 5
                 loopLength = length(waveSpecTable.SignificantWaveHeight);
-                
-                % Calc power gen. for all  cases simultaneously
-                wec = WEC('generic');
-                wec.calcPowerGen(waveSpecTable, [], simTime, 0, 0);  
-
-                modOut.meanPowerGen = wec.meanPowerGen;
-                modOut.dataIn = waveSpecTable;
-
             case 6
                 loopLength = length(dataFiles);
-                modOut.dataIn = dataFiles;
         end
-
 end
+
+
+% Calculate Power Generation
+if strcmp(modIn.depVar, 'AUV Model')
+    modIn.calcPowerGen(wec, modOut)
+end
+
 
 %% Generate central energy storage object
 
-if userDefinedBattery == 1
-    energyStorage = EnergyStorage(energyStorageSize, 10, 20); 
+if userDefinedBattery ~=0
+    energyStorage = EnergyStorage(userDefinedBattery, 10, 20); 
 
-elseif userDefinedBattery == 0
+else  % userDefinedBattery == 0 - using code-calculated size
     energyStorage = EnergyStorage([], 10, 20);  % Empty battery storage will be rewritten after fleet size determination...
-
-else
-    error('"userDefinedBattery" out of expected range')
 end
 
 modOut.userDefinedBattery = userDefinedBattery; 
 
 
-%% Dependent Variable Loop / Run Simulation
+%% Dependent Variable Loop / Run Simulation %% Could probably do this parallel..
 
 for depVarCount = 1:loopLength
 
     %% Prep variables (power gen & auv model(s))
-    switch depVar
+
+    clearvars -except modIn modOut auv wec energyStorage depVarCount
+
+    switch modIn.depVar
         case 'AUV Model'
-
-            % Clear Variables
-            clearvars -except simTime dt depVarCount resourceDataType modOut auvModels depVar wec energyStorage incorpStagger maxFleetSize
-
-            % Generate auv object
-            auv = AUV(auvModels{depVarCount}); 
+            % Clear auv object, make a new one (pwr gen already calculated)
+            clear auv
+            auv = AUV(modIn.auvModels{depVarCount}); 
 
 
         case 'WEC Power Gen / Wave Resource'
-            % Generate WEC & AUV Objects
+            % Clear wec object, make a new one, calculate power gen
+            clear wec
             wec = WEC('generic');
+            modIn.calcPowerGen(wec, modOut, depVarCount);
 
-            switch resourceDataType
-                case 1
-                    % Save Sea state
-                    modOut.seaState(depVarCount) = depVarCount;
-
-                    % Clear Variables
-                    clearvars -except simTime dt depVarCount resourceDataType modOut auvModels depVar RM3 auvModelNum auv wec energyStorage incorpStagger maxFleetSize
-        
-                    % Calc. power gen
-                    wec.reshapePowerGen(RM3(depVarCount).Power, RM3(depVarCount).Time, simTime(end), dt);  % Output is wec.powerGenMeans: Timeseries of power generation [W] corresponding to simulation time [hr].
-
-                case 2
-                    % Clear Variables
-                    clearvars -except simTime dt depVarCount resourceDataType modOut auvModels depVar auvModelNum auv wec energyStorage dataFiles vars tIndx pwrIndx incorpStagger maxFleetSize
-
-                    % Load power data into workspace: 
-                    dataTime = load(dataFiles{depVarCount}, vars(tIndx).name);
-                    pGen_dataTime = load(dataFiles{depVarCount}, vars(pwrIndx).name);
-
-                    % Reshape power gen
-                    wec.reshapePowerGen(pGen_dataTime, dataTime, simHrs, dt);
-                    modOut.meanPowerGen = wec.meanPowerGen; 
-                    modOut.dataIn = dataFiles; 
-
-                case 3
-                    % Clear Variables
-                    clearvars -except simTime dt depVarCount resourceDataType modOut auvModels depVar meanPower auvModelNum auv wec energyStorage incorpStagger maxFleetSize
-
-                    % Save power generated (user input)
-                    wec.meanPowerGen = modOut.meanPowerGen(depVarCount);
-                    wec.lowPowerGen = 0.75 * wec.meanPowerGen; 
-                    wec.powerGenMeans = ones(size(simTime)) * wec.meanPowerGen; 
-
-                case 4
-                    % Clear Variables
-                    clearvars -except simTime dt depVarCount resourceDataType modOut auvModels depVar auvModelNum auv dataFiles wec energyStorage incorpStagger maxFleetSize
-
-                    % Load data & calculate power generation
-                    dataTable = readtable(dataFiles{depVarCount},'VariableNamingRule','modify');
-                       
-                    % Calculate power generation
-                    wec.calcPowerGen(dataTable,'meanPwr', simTime, 0, 0);
-
-                case 5
-                    % Clear Variables
-                    clearvars -except simTime dt depVarCount resourceDataType modOut auvModels depVar auvModelNum auv waveSpecTable wec energyStorage incorpStagger maxFleetSize
-
-                    % Save power gen (already calculated from user-inputs)
-                    wec.meanPowerGen = modOut.meanPowerGen(depVarCount); 
-                    wec.lowPowerGen = 0.75 * wec.meanPowerGen;
-                    wec.powerGenMeans = ones(size(simTime)) * wec.meanPowerGen; 
-
-                case 6
-                    % Clear Vars
-                    clearvars -except simTime dt depVarCount resourceDataType modOut auvModels depVar auvModelNum auv wec energyStorage dataFiles vars pMatIndx tIndx HsIndx TeIndx incorpStagger maxFleetSize
-
-                    % Load power data into workspace:
-                    pMat = load(dataFiles{depVarCount}, vars(pMatIndx).name);
-                    dataTime = load(dataFiles{depVarCount}, vars(tIndx).name);
-                    Hs = load(dataFiles{depVarCount}, vars(HsIndx).name);
-                    Te = load(dataFiles{depVarCount}, vars(TeIndx).name);
-            
-                    % Calculate power from grid interpolation
-                    pMatTableFn = griddedInterpolant( repmat(pMat(2:end,1), 1, size(pMat, 2)-1), repmat(pMat(1,2:end), size(pMat, 1)-1, 1), pMat(2:end, 2:end),'linear','nearest');  % X1 grid, X2 grid, valueMatrix, interpolation method, extrapolation method
-                    pGen_dataTime = pMatTableFn(Hs, Te); 
-
-                    % Reshape power gen
-                    wec.reshapePowerGen(pGen_dataTime, dataTime, simHrs, dt);
-                    modOut.meanPowerGen = wec.meanPowerGen;
-                    modOut.dataIn = dataFiles;
-
-            end
     end
     
 
@@ -481,7 +236,7 @@ for depVarCount = 1:loopLength
             clear modOut.energyStorageBatteryLvl modOut.wecBatteryLvl modOut.auvBatteryLvl modOut.auvSchedule modOut.auvTimeOnMission
 
         else
-            modOut.fleetSize(depVarCount) = calcFleetSize(wec, auv, energyStorage, maxFleetSize);  % initial calculation
+            modOut.fleetSize(depVarCount) = calcFleetSize(wec, auv, energyStorage, modIn.maxFleetSize);  % initial calculation
 
         end
         
@@ -495,7 +250,7 @@ for depVarCount = 1:loopLength
         % recharge AUV(s), and support AUV & WEC hotel loads during
         % that time given poor power generation +~ 10% for safety.
         
-        wec.calcLowPower(resourceDataType, dt, auv); 
+        wec.calcLowPower(modIn.resourceDataType, modIn.dt, auv); 
 
         lowPowerOverflow = wec.lowPowerGen -  wec.hotelLoad/(wec.n_battery^2);  % Assumes wec is already at max battery
         minBattery = ( auv.chargeLoad(auv.mission)*modOut.fleetSize(depVarCount)/energyStorage.n_battery + auv.chargeTime(auv.mission)*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTransfer - lowPowerOverflow*auv.chargeTime(auv.mission)*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  ) *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
@@ -522,11 +277,11 @@ for depVarCount = 1:loopLength
         if modOut.fleetSize(depVarCount) > 0
     
             % Build fleet
-            switch depVar
+            switch modIn.depVar
                 case 'AUV Model'
-                    auvFleet = arrayfun(@(x) AUV(auvModels{depVarCount}), 1:modOut.fleetSize(depVarCount), 'UniformOutput', false);  
+                    auvFleet = arrayfun(@(x) AUV(modIn.auvModels{depVarCount}), 1:modOut.fleetSize(depVarCount), 'UniformOutput', false);  
                 case 'WEC Power Gen / Wave Resource'
-                    auvFleet = arrayfun(@(x) AUV(auvModels{auvModelNum}), 1:modOut.fleetSize(depVarCount), 'UniformOutput', false);
+                    auvFleet = arrayfun(@(x) AUV(modIn.auvModels), 1:modOut.fleetSize(depVarCount), 'UniformOutput', false);
             end
 
             modOut.auvFleet{depVarCount} = auvFleet;  % save to model output object. 
@@ -538,24 +293,24 @@ for depVarCount = 1:loopLength
             %   - AUV must dock with at least 20% of its battery left
             %   - Minimize time when central energy storage & AUV are both at full battery
             %   - energyStorage must have enough battery to charge AUV(s) when they return
-            [modOut.energyStorageBatteryLvl(:, depVarCount), modOut.wecBatteryLvl(:, depVarCount), modOut.auvBatteryLvl{depVarCount}, modOut.auvSchedule{depVarCount}] = runPowerModel(simTime, wec, auvFleet, energyStorage, incorpStagger);
+            [modOut.energyStorageBatteryLvl(:, depVarCount), modOut.wecBatteryLvl(:, depVarCount), modOut.auvBatteryLvl{depVarCount}, modOut.auvSchedule{depVarCount}] = runPowerModel(modIn.simTime, wec, auvFleet, energyStorage, modIn.incorpStagger);
            
             %% Post-Simulation Calcs
 
             % Time spent 'on mission'
-            modOut.auvTimeOnMission{depVarCount} = sum((modOut.auvSchedule{depVarCount} == 1) * dt);
+            modOut.auvTimeOnMission{depVarCount} = sum((modOut.auvSchedule{depVarCount} == 1) * modIn.dt);
             
             % Time 'on-mission' within performance calculation domain in the case of staggered deployments (excluding time AUVs are artificially held at dock)
-            if modOut.incorpStagger == 1 
+            if modIn.incorpStagger == 1 
                 if modOut.fleetSize(depVarCount) == 1
                     modOut.auvTimeOnMissionCorrected{depVarCount} = modOut.auvTimeOnMission{depVarCount};
                     
                 else
                     staggerHours = (modOut.auvFleet{1,depVarCount}{1,1}.missionSpecs(2) + modOut.auvFleet{1,depVarCount}{1,1}.chargeTime) / modOut.fleetSize(depVarCount);
                     staggerPreliminaryTime = (modOut.fleetSize(depVarCount) - 1) * staggerHours;
-                    [~, preDomainIndx] = min(abs(modOut.simTime - staggerPreliminaryTime));
+                    [~, preDomainIndx] = min(abs(modIn.simTime - staggerPreliminaryTime));
 
-                    modOut.auvTimeOnMissionCorrected{depVarCount} = sum((modOut.auvSchedule{depVarCount}(preDomainIndx+1:end, :) == 1) * dt);  % Exclude on-mission time before all AUVs are deployed
+                    modOut.auvTimeOnMissionCorrected{depVarCount} = sum((modOut.auvSchedule{depVarCount}(preDomainIndx+1:end, :) == 1) * modIn.dt);  % Exclude on-mission time before all AUVs are deployed
                 end
 
             end
@@ -576,15 +331,14 @@ for depVarCount = 1:loopLength
             end 
 
         else  % Wave resource insufficient to support deployment of AUV here
-            % warning('Wave resource for sea state %f insufficient to support the hotel load for any %s AUVs at this site.', depVar, auv.model)
             warning('Wave resource insufficient to support the hotel load for any %s AUVs at this site.', auv.model)
             
             modOut.auvTimeOnMission{depVarCount} = 0;  % No AUV's = no time spent on missions
             modOut.auvTimeOnMissionCorrected{depVarCount} = 0; 
             modOut.auvSchedule{depVarCount} = [];
             modOut.auvBatteryLvl{depVarCount} = [];
-            modOut.energyStorageBatteryLvl(:, depVarCount) = zeros(size(simTime));
-            modOut.wecBatteryLvl(:, depVarCount) = zeros(size(simTime)); 
+            modOut.energyStorageBatteryLvl(:, depVarCount) = zeros(size(modIn.simTime));
+            modOut.wecBatteryLvl(:, depVarCount) = zeros(size(modIn.simTime)); 
             modOut.auvFleet{depVarCount} = [];
 
             runFleetCalc = 0;
@@ -598,7 +352,7 @@ for depVarCount = 1:loopLength
     modOut.ratePwrUsed(depVarCount) = (auv.missionSpecs(auv.mission, 3)*auv.maxBattery + auv.hotelLoad*auv.chargeTime) / (auv.missionSpecs(auv.mission, 2) + auv.chargeTime);  % AVG rate AUV uses power during a mission + recharge cycle. No efficiencies applied!  
     modOut.auvMissionLength(depVarCount) = auv.missionSpecs(auv.mission, 2);
     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
-    switch depVar
+    switch modIn.depVar
         case 'AUV Model'
             if depVarCount == 1
                 modOut.powerGenMeans = wec.powerGenMeans;  % only save power gen once if it isn't recalculated each iteration
@@ -621,7 +375,7 @@ modOut.plotPowerGen
 %% Save Output
 % Edit and run the following to save data to 'outputData' folder: 
 %{  
-save('outputData/usWestCoast_03Dec25.mat','auv','energyStorage','modOut','wec')
+save('outputData/usWestCoast_03Dec25.mat','auv','energyStorage','modOut','modIn','wec')
 %}
 
 %% Simulation Meta
