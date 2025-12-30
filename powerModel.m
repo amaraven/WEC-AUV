@@ -279,9 +279,9 @@ for depVarCount = 1:loopLength
             % Build fleet
             switch modIn.depVar
                 case 'AUV Model'
-                    auvFleet = arrayfun(@(x) AUV(modIn.auvModels{depVarCount}), 1:modOut.fleetSize(depVarCount), 'UniformOutput', false);  
+                    auvFleet = arrayfun(@(x) AUV(modIn.auvModels{depVarCount}), 1:modOut.fleetSize(depVarCount));  
                 case 'WEC Power Gen / Wave Resource'
-                    auvFleet = arrayfun(@(x) AUV(modIn.auvModels), 1:modOut.fleetSize(depVarCount), 'UniformOutput', false);
+                    auvFleet = arrayfun(@(x) AUV(modIn.auvModels), 1:modOut.fleetSize(depVarCount));
             end
 
             modOut.auvFleet{depVarCount} = auvFleet;  % save to model output object. 
@@ -306,7 +306,7 @@ for depVarCount = 1:loopLength
                     modOut.auvTimeOnMissionCorrected{depVarCount} = modOut.auvTimeOnMission{depVarCount};
                     
                 else
-                    staggerHours = (modOut.auvFleet{1,depVarCount}{1,1}.missionSpecs(2) + modOut.auvFleet{1,depVarCount}{1,1}.chargeTime) / modOut.fleetSize(depVarCount);
+                    staggerHours = (modOut.auvFleet{1,depVarCount}(1).missionSpecs(2) + modOut.auvFleet{1,depVarCount}(1).chargeTime) / modOut.fleetSize(depVarCount);
                     staggerPreliminaryTime = (modOut.fleetSize(depVarCount) - 1) * staggerHours;
                     [~, preDomainIndx] = min(abs(modIn.simTime - staggerPreliminaryTime));
 
@@ -318,7 +318,7 @@ for depVarCount = 1:loopLength
             %% Simulation Quality Checks
 
             % if last auv only went on one mission, and first auv went on more, OR central battery dropped below 0 (even with battery saver) auvFleet is too large by at least 1
-            if ( (modOut.auvTimeOnMission{depVarCount}(1,end) - (auvFleet{end}.chargeTime(auvFleet{end}.mission) + auvFleet{end}.missionSpecs(auvFleet{end}.mission, 2)) ) <= 0 ) && ((modOut.auvTimeOnMission{depVarCount}(1,1) - (auvFleet{1}.chargeTime(auvFleet{1}.mission) + auvFleet{1}.missionSpecs(auvFleet{1}.mission, 2)) ) > 0 ) || any(modOut.energyStorageBatteryLvl(:,depVarCount) < 0)
+            if ( (modOut.auvTimeOnMission{depVarCount}(1,end) - (auvFleet(end).chargeTime(auvFleet(end).mission) + auvFleet(end).missionSpecs(auvFleet(end).mission, 2)) ) <= 0 ) && ((modOut.auvTimeOnMission{depVarCount}(1,1) - (auvFleet(1).chargeTime(auvFleet(1).mission) + auvFleet(1).missionSpecs(auvFleet(1).mission, 2)) ) > 0 ) || any(modOut.energyStorageBatteryLvl(:,depVarCount) < 0)
                 runFleetCalc = 1;  % re-run fleet size calculation. (Disable to plot results for systems with too-many AUVs)  
                 warning('Sorry, our initial %s fleet size estimate of %f was too high. Re-running the simulation now...', auv.model, modOut.fleetSize(depVarCount))
         

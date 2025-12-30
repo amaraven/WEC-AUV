@@ -66,7 +66,7 @@ classdef EnergyStorage < handle
         function [eStorageFutureBattery, eStorageNoBatteryFlag] = estBattery(energyStorage, auvFleet, simTime, dt, auvToDeploy, wec)
             % Estimates the central battery level at a given time
             % Inputs: 
-            % - auvFleet: Cell array of AUV objects
+            % - auvFleet: Array of AUV objects
             % - simTime: [hr] Current simulation time
             % - dt: [hr] Simulation timestep
             % - auvToDeploy: index of AUV to deploy in auvFleet
@@ -94,7 +94,7 @@ classdef EnergyStorage < handle
 
             % Extract auvFleet values
             for auvNum = 1: numAUVs
-                auv = auvFleet{auvNum};
+                auv = auvFleet(auvNum);
                 auvChargeRate(auvNum) = auv.chargeRate; 
                 auvHotelLoad(auvNum) = auv.hotelLoad;
                 auv_n_powerTransfer(auvNum) = auv.n_powerTransfer; 
@@ -112,7 +112,7 @@ classdef EnergyStorage < handle
             adjustedRechargeRate = auvChargeRate / 1.2;  % Simplified from: maxB / ( (0.8*maxB / chargeRate) + (0.4*maxB / chargeRate) ) = chargeRate / 1.2
            
             % Calculate time auv auvToDeploy will complete charging after return from mission
-            t_return = simTime + auvFleet{auvToDeploy}.missionSpecs(auvFleet{auvToDeploy}.mission, 2) + auvFleet{auvToDeploy}.chargeTime(auvFleet{auvToDeploy}.mission); 
+            t_return = simTime + auvFleet(auvToDeploy).missionSpecs(auvFleet(auvToDeploy).mission, 2) + auvFleet(auvToDeploy).chargeTime(auvFleet(auvToDeploy).mission); 
 
             % Power draw rates[W]
             hotelDrawRate = auvHotelLoad ./ auv_n_powerTransfer ./ auv_n_battery; 
@@ -150,8 +150,8 @@ classdef EnergyStorage < handle
             
             % Track AUV opStates (within intervals between changes in fleet opState)
 
-            chargingMatrix = zeros(length(auvFleet), length(timeIntervals));  
-            hotelMatrix = zeros(length(auvFleet), length(timeIntervals));
+            chargingMatrix = zeros(numel(auvFleet), length(timeIntervals));  
+            hotelMatrix = zeros(numel(auvFleet), length(timeIntervals));
             powerDumps = zeros(1, length(timeIntervals));
             
             for j = 1:length(timeIntervals)  

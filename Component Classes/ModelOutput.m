@@ -33,7 +33,7 @@ classdef ModelOutput < handle
         auvTimeOnMission    % [h] Time each AUV spends 'on-mission' during the simulation. Cell array with columns corresponding to test case. Each array item is a 1xm matrix with m corresponding to the number of AUVs in fleet.
         auvTimeOnMissionCorrected   % [h] Time each AUV spends 'on-mission' after all AUVs are deployed in the case of a staggered deployment. Empty if deployment stagger not incorporated. Used for performance calculations using an adjusted domain to exclude time when AUVs are artificially held at dock
         auvModels           % Model(s) of auv used for simulation
-        auvFleet            % Struct array containing auv fleet for each test case
+        auvFleet            % Cell array containing auv fleet for each test case
     end
 
     properties (Hidden = true)
