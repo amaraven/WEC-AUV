@@ -40,18 +40,67 @@ classdef AUV < handle
     methods
 
         %% Constructor: Creates & returns an object
-        function auv = AUV(model)
-            % Creates an object given AUV model
+        % function auv = AUV(model, mass, missionSpecs, maxBattery, chargeRate, chargeMethod, hotelLoad, rechargeThreshold, n_battery, n_powerTransfer)
+        function auv = AUV(varargin)
+            % AUV object constructor with name-value pairs for custom
+            % user input hardware specifications
+            %
+            % Optional Name-Value Pair Inputs: 
+            % - model: String label for AUV model. Pre-set AUV defaults
+            %    esist for model names 'A' through 'U'
+            % - mass: [kg] Numeric value for AUV mass
+            % - missionSpecs: 1x3 numeric array containing the mission
+            %    number (must be 1), time to complete mission [hr], and
+            %    fraction of battery used for mission (0.XX)
+            % - maxBattery: [Wh] Numeric value for the AUV's total battery
+            %    capacity
+            % - chargeRate: [W] Rate of AUV battery recharge
+            % - chargeMethod: 1 - wired recharge connection OR 2 - wireless
+            %    recharge
+            % - hotelLoad: [W] Numeric value for the AUV's baseline power
+            %    usage
+            % - rechargeThreshold: Fraction of AUV battery that triggers
+            %    recharge (0.XX)
+            % - n_battery: Battery efficiency (0.XX)
+            % - n_powerTransfer: Power transfer efficiency (0.XX)
 
-            auv.rechargeThreshold = 0.20;  
-            
-            auv.mission = 1;  % Current auv's only have one mission option, so always will be running 'mission 1
+            % Set up inputParser
+            p = inputParser;
+            p.FunctionName = 'AUV';
 
-            
-            switch model 
+            % name-value pair inputs w/ empty defaults
+            addParameter(p, 'model', [], @(x) ischar(x) || issstring(x));
+            addParameter(p, 'mass', [], @isnumeric);
+            addParameter(p, 'missionSpecs', [], @isnumeric);
+            addParameter(p, 'maxBattery', [], @isnumeric);
+            addParameter(p, 'chargeRate', [], @isnumeric);
+            addParameter(p, 'chargeMethod', [], @(x) isnumeric(x) && ismember(x, [1,2]));
+            addParameter(p, 'hotelLoad', [], @isnumeric);
+            addParameter(p, 'rechargeThreshold', [], @isnumeric);
+            addParameter(p, 'n_battery', [], @isnumeric);
+            addParameter(p, 'n_powerTransfer', [], @isnumeric);
+
+            % parse inputs
+            parse(p, varargin{:});
+            inputStruct = p.Results;
+
+            % Assign model name
+            if isempty(inputStruct.model)
+                warning('No model name provided, using "Default AUV" for this simulation')
+                auv.model = 'Default AUV';
+            else
+                auv.model = inputStruct.model;
+            end
+
+            args = {'mass', 'missionSpecs', 'maxBattery', 'chargeRate', 'chargeMethod', 'hotelLoad', 'rechargeThreshold', 'n_battery', 'n_powerTransfer'};
+            argDefaults = {100, [1, 10, 0.8], 1000, 200, 1, [], 0.20, 0.9, []};
+
+
+            % Assign values for pre-set models
+            switch auv.model 
                 case 'A'  % Source: Driscol '19
-                    auv.model = model;  
                     auv.mass = 27;  % Iver3 model options range from 27-38.5 kg
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 8*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];  % Iver3 model options range from 8-14 hrs until recharge needed
                     auv.maxBattery = 800; 
                     auv.chargeRate = 160;
@@ -59,8 +108,8 @@ classdef AUV < handle
                     auv.hotelLoad = 90;  
 
                 case 'B'  % Source: Driscol '19
-                    auv.model = model;
                     auv.mass = 38.5;  % range from 27-38.5 kg
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 14*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];  % range from 8-14 hrs
                     auv.maxBattery = 800; 
                     auv.chargeRate = 160;
@@ -68,8 +117,8 @@ classdef AUV < handle
                     auv.hotelLoad = 90;  
 
                 case 'C'  % *all UUVs* Website source: https://hii.com/what-we-do/capabilities/unmanned-systems/remus-uuvs/
-                    auv.model = model;
                     auv.mass = 38.6;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 10*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 1500; 
                     auv.chargeRate = auv.maxBattery / 6; 
@@ -77,120 +126,120 @@ classdef AUV < handle
                     auv.hotelLoad = 90;  
 
                 case 'D'  % 4
-                    auv.model = model;
                     auv.mass = 58.5;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 20*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 3000; 
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
                 case 'E'  % 5
-                    auv.model = model;
                     auv.mass = 70.3;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 30*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 4500; 
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
                 case 'F'  % 6
-                    auv.model = model;
                     auv.mass = 210;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 42*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 9600; 
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
                 case 'G'  % 7
-                    auv.model = model;
                     auv.mass = 279;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 80*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 19300; 
                     auv.chargeRate = auv.maxBattery / 10;
                     auv.chargeMethod = 1;
 
                 case 'H'
-                    auv.model = model;
                     auv.mass = 347;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 110*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 28900; 
                     auv.chargeRate = auv.maxBattery / 12;
                     auv.chargeMethod = 1;
 
                 case 'I'  %9
-                    auv.model = model;
                     auv.mass = 1630;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 25*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 17550; 
                     auv.chargeRate = auv.maxBattery / 24;
                     auv.chargeMethod = 1;
 
                 case 'J'
-                    auv.model = model;
                     auv.mass = 70;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 8*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 1900;
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
                 case 'K'
-                    auv.model = model;
                     auv.mass = 250;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 36*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 7600;
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
                 case 'L'  % 12
-                    auv.model = model;
                     auv.mass = 750;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 25*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 13500;
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;  
 
                 case 'M'
-                    auv.model = model;
                     auv.mass = 72.6;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 3.5*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 1500;
                     auv.chargeRate = auv.maxBattery / 6;
                     auv.chargeMethod = 1;
 
                 case 'N'  % 14
-                    auv.model = model;
                     auv.mass = 2200;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 72*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 62500;
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
                 case 'O'
-                    auv.model = model;
                     auv.mass = 8000;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 360*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 400000;
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
                 case 'P'  % 16
-                    auv.model = model;
                     auv.mass = 1000;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 24*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 24000;
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
                 case 'Q'
-                    auv.model = model;
                     auv.mass = 1550;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 74*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 48000;
                     auv.chargeRate = auv.maxBattery / 8;
                     auv.chargeMethod = 1;
 
                 case 'R'  % 18
-                    auv.model = model;
                     auv.mass = 25;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 10*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 600;
                     auv.chargeRate = auv.maxBattery / 5;
@@ -198,60 +247,90 @@ classdef AUV < handle
                     auv.hotelLoad = 1;  % [W] from email correspondance with boxfish
 
                 case 'S'
-                    auv.model = model;
                     auv.mass = 28;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 10*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 600;
                     auv.chargeRate = auv.maxBattery / 4;
                     auv.chargeMethod = 2;
 
                 case 'T'  %20
-                    auv.model = model; 
                     auv.mass = 650;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 10.8*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 12000; 
                     auv.chargeRate = auv.maxBattery / 3.64;
                     auv.chargeMethod = 1;
 
                 case 'U'
-                    auv.model = model; 
                     auv.mass = 1300;
+                    auv.rechargeThreshold = 0.20;
                     auv.missionSpecs = [1, 21.6*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
                     auv.maxBattery = 30000; 
                     auv.chargeRate = auv.maxBattery / 9.09;
                     auv.chargeMethod = 1;
 
+                % For custom model
                 otherwise
-                    error('AUV model %s not yet supported. Update AUV class file to support this model.', model);
+                    % Assign all properties from input arguments
+                    if ~isempty(inputStruct.model)        
+                        auv.model = inputStruct.model;
+                    end
+                    auv.mass = inputStruct.mass;
+                    auv.missionSpecs = inputStruct.missionSpecs; 
+                    auv.maxBattery = inputStruct.maxBattery;
+                    auv.chargeRate = inputStruct.chargeRate;
+                    auv.chargeMethod = inputStruct.chargeMethod;
+                    auv.hotelLoad = inputStruct.hotelLoad;
+                    auv.rechargeThreshold = inputStruct.rechargeThreshold;
+                    auv.n_battery = inputStruct.n_battery;
+                    auv.n_powerTransfer = inputStruct.n_powerTransfer;
 
+                    % Assign defaults to empty inputs
+                    for i = 1:numel(args)
+                        val = inputStruct.(args{i});
+                        if isempty(val)
+                            auv.(args{i}) = argDefaults{i};
+                        end
+                    end
             end
 
-            % Hotel Load (extrapolate from Boxfish AUV)
-            interpHotelLoad = 1;  % 1 - yes, interpolate
+            auv.mission = 1;  % Current auv's only have one mission option, so always will be running 'mission 1
+
+
+            % Override assigned defaults w/ user-input arguments
+            for i = 1:numel(args)
+                val = inputStruct.(args{i});
+                if ~isempty(val)
+                    auv.(args{i}) = val;
+                end
+            end
             
+
+            % Hotel Load (extrapolate from Boxfish AUV)
+            interpHotelLoad = 1;
             if isempty(auv.hotelLoad)
                 if interpHotelLoad == 1 
-                    auv.hotelLoad = round(auv.mass / 25);  % Interpolates based on auv mass relative to hotel load of Boxfish AUV
-                
+                    auv.hotelLoad = round(auv.mass / 25);  % Interpolates based on auv mass relative to hotel load of Boxfish AUV                
                 else
                     auv.hotelLoad = 90;  % [W] Generic, used in 'Wave-Powered AUV Recharging: A Feasibility Study' by B. P. Driscol, A. Gish, and R. G. Coe in 2019
-
                 end
             end
             
 
             % Efficiencies
-            auv.n_battery = 0.90;  % from 'A unified simulation framework for wave energy powered underwater vehicle docking and charging' by M. Chen Et. Al. in 2024
+            if isempty(auv.n_battery)
+                auv.n_battery = 0.90;  % from 'A unified simulation framework for wave energy powered underwater vehicle docking and charging' by M. Chen Et. Al. in 2024
+            end
 
-            if auv.chargeMethod == 1
-                auv.n_powerTransfer = 0.9;  % https://www.researchgate.net/publication/264124522_Efficiency_Comparison_of_Wire_and_Wireless_Battery_Charging_Based_on_Connection_Probability_Analysis
-
-            elseif auv.chargeMethod == 2
-                auv.n_powerTransfer = 0.50;  % Baseline efficiency for wireless power transfer from 'Adaptive Wireless Power for Subsea Vehicles' by D. Manalang Et. Al. in 2022
-
-            else
-                error('Unsupported charge method. Please specify 1 for wired charging or 2 for wireless charging.');
-
+            if isempty(auv.n_powerTransfer)
+                if auv.chargeMethod == 1
+                    auv.n_powerTransfer = 0.9;  % https://www.researchgate.net/publication/264124522_Efficiency_Comparison_of_Wire_and_Wireless_Battery_Charging_Based_on_Connection_Probability_Analysis
+                elseif auv.chargeMethod == 2
+                    auv.n_powerTransfer = 0.50;  % Baseline efficiency for wireless power transfer from 'Adaptive Wireless Power for Subsea Vehicles' by D. Manalang Et. Al. in 2022
+                else
+                    error('Unsupported charge method. Please specify 1 for wired charging or 2 for wireless charging.');
+                end
             end
 
 

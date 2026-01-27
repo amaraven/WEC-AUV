@@ -19,7 +19,7 @@ function fleetSize = calcFleetSize(wec, auv, energyStorage, maxFleetSize)
 powerValue = wec.meanPowerGen - wec.hotelLoad/(wec.n_battery^2); 
 
 % Calculate MAX number of AUV's WEC could support in dock with given/calculated power generation
-maxHotelFleet = floor((powerValue*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr - energyStorage.baseHotelLoad/energyStorage.n_battery/energyStorage.n_powerTransfer) / (auv.hotelLoad / energyStorage.n_battery / auv.n_battery / auv.n_powerTransfer + energyStorage.dockHotelLoad/energyStorage.n_battery/energyStorage.n_powerTransfer));  % PowerGen - wecHotelLoad - auvHotelLoad*fleetSize > 0    
+maxHotelFleet = floor((powerValue*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr - energyStorage.baseHotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr) / (auv.hotelLoad / energyStorage.n_battery / auv.n_battery / auv.n_powerTransfer + energyStorage.dockHotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr));  % PowerGen - wecHotelLoad - auvHotelLoad*fleetSize > 0    
 
 % Time for an auv to go on mission + recharge + hotel during other auv mssn
 cycleTime = auv.chargeTime(auv.mission) + auv.missionSpecs(auv.mission,2);  
@@ -29,7 +29,7 @@ if maxHotelFleet < 1
     fleetSize = 0;
 
 else 
-    powAvailableFleet = floor((powerValue*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr - energyStorage.baseHotelLoad/energyStorage.n_battery/energyStorage.n_wecPwrTrnsfr)*cycleTime / (auv.chargeLoad/energyStorage.n_battery + energyStorage.dockHotelLoad*cycleTime/energyStorage.n_battery/energyStorage.n_powerTransfer));  % number of auv's that can recharge given the power available
+    powAvailableFleet = floor((powerValue*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr - energyStorage.baseHotelLoad/energyStorage.n_battery/energyStorage.n_wecPwrTrnsfr)*cycleTime / (auv.chargeLoad/energyStorage.n_battery + energyStorage.dockHotelLoad*cycleTime/energyStorage.n_battery/energyStorage.n_powerTrnsfr));  % number of auv's that can recharge given the power available
 
     fleetSize = min(powAvailableFleet, maxHotelFleet);
 

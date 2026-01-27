@@ -20,7 +20,7 @@ classdef EnergyStorage < handle
         hotelLoad       % [W] Total baseline power usage of hardware (unit + AUV dock(s)). Defaults to base + 1 dock
         n_battery       % Battery efficiency [0.XX]
         n_wecPwrTrnsfr  % Efficiency of power transfer between WEC & central energy storage [0.XX]
-        n_powerTransfer % Efficiency of power transfer between central battery and docks [0.XX]
+        n_powerTrnsfr % Efficiency of power transfer between central battery and docks [0.XX]
     end
     properties (Dependent)
         lowBatteryLvl;  % [Wh] Battery level that triggers 'low power' mode (stops charging AUV(s), continues to supply hotel loads)
@@ -30,19 +30,56 @@ classdef EnergyStorage < handle
     methods
 
         %% Constructor: Creates & returns an EnergyStorage object
-        function energyStorage = EnergyStorage(maxBattery, baseHotelLoad, dockHotelLoad)
-            % Constructor function user-inputs
-            energyStorage.maxBattery = maxBattery; 
-            energyStorage.baseHotelLoad = baseHotelLoad; 
-            energyStorage.dockHotelLoad = dockHotelLoad;
+        % function energyStorage = EnergyStorage(maxBattery, baseHotelLoad, dockHotelLoad)
+        function energyStorage = EnergyStorage(varargin)
+            % EnergyStorage object constructor. Will generate an object 
+            % with default property values with no given inputs. Default 
+            % configuration is a total battery capacity determined by the 
+            % AUV fleet requirements, a base hotel load of 10 W, dock hotel 
+            % load of 20 W, and all efficiencies are 0.90. These values can 
+            % be customized using the following optional name-value pair 
+            % inputs: 
+            % - maxBattery: [Wh] Total energy storage onboard. Default is
+            %    left empty to be calculated based on the AUV fleet needs.
+            % - baseHotelLoad: [W] Running power-draw of the central unit
+            %    (excluding dock(s)). Default is 10 W.
+            % - dockHotelLoad: [W] Running power-draw of a single AUV dock.
+            %    Default is 20 W.
+            % - n_battery: Battery efficiency [0.XX]. Default is 0.90.
+            % - n_wecPwrTrnsfr: Efficiency of power transfer between WEC
+            %    and central energy storage [0.XX]. Default is 0.90 from https://www.researchgate.net/publication/264124522_Efficiency_Comparison_of_Wire_and_Wireless_Battery_Charging_Based_on_Connection_Probability_Analysis   
+            % - n_powerTrnsfr: Efficiency of power transfer between
+            %    central battery and docks [0.XX]. Default is 0.90.
 
-            % Default efficiency values
-            energyStorage.n_battery = 0.90;  % 0.90 standard used in Chen '24
-            energyStorage.n_wecPwrTrnsfr = 0.9;  % https://www.researchgate.net/publication/264124522_Efficiency_Comparison_of_Wire_and_Wireless_Battery_Charging_Based_on_Connection_Probability_Analysis   
-            energyStorage.n_powerTransfer = 0.9; % ^" assumes cabled connection. 
+            p = inputParser;
+            p.FunctionName = 'EnergyStorage';
 
-            % Default hotel load = baseline + 1 dock
-            energyStorage.hotelLoad = baseHotelLoad + dockHotelLoad;  % Default value assumes 1 AUV
+            % Name-value pair inputs w/ empty defaults
+            addParameter(p, 'maxBattery', [], @isnumeric);
+            addParameter(p, 'baseHotelLoad', [], @isnumeric);
+            addParameter(p, 'dockHotelLoad', [], @isnumeric);
+            addParameter(p, 'n_battery', [], @isnumeric);  
+            addParameter(p, 'n_wecPwrTrnsfr', [], @isnumeric);  
+            addParameter(p, 'n_powerTrnsfr', [], @isnumeric);  
+
+            % Parse inputs
+            parse(p, varargin{:});
+            inputStruct = p.Results;
+
+            % Assign user-input and/or default values
+            args = {'maxBattery', 'baseHotelLoad', 'dockHotelLoad', 'n_battery', 'n_wecPwrTrnsfr', 'n_powerTrnsfr'};
+            argDefaults = {[], 10, 20, 0.9, 0.9, 0.9};
+            for i = 1:numel(args)
+                val = inputStruct.(args{i});
+                if isempty(val)
+                    energyStorage.(args{i}) = argDefaults{i};  % Assign default
+                else
+                    energyStorage.(args{i}) = val;  % Assign user-input value
+                end
+            end
+
+            % Default hotel load = base + 1 dock
+            energyStorage.hotelLoad = energyStorage.baseHotelLoad + energyStorage.dockHotelLoad;  % Default value assumes 1 AUV
 
             % Set userDefinedBattery flag
             if isempty(energyStorage.maxBattery)
@@ -177,10 +214,10 @@ classdef EnergyStorage < handle
                 end
 
                 % Power dumped = PowerGenOverflow - eStorageHotelLoad - eStorageMaxBattery + eStorageCurrentBattery - auvTotalDraw
-                powerDumps(j) = max(pwrOverflowRate.*timeIntervals(j) - energyStorage.hotelLoad.*timeIntervals(j)/energyStorage.n_battery/energyStorage.n_powerTransfer - energyStorage.maxBattery + eStorageBattInit - sum(chargingMatrix(:,j).*chargingDrawRate').*timeIntervals(j)/energyStorage.n_battery - sum(hotelMatrix(:,j).*hotelDrawRate')*timeIntervals(j)/energyStorage.n_battery, 0);
+                powerDumps(j) = max(pwrOverflowRate.*timeIntervals(j) - energyStorage.hotelLoad.*timeIntervals(j)/energyStorage.n_battery/energyStorage.n_powerTrnsfr - energyStorage.maxBattery + eStorageBattInit - sum(chargingMatrix(:,j).*chargingDrawRate').*timeIntervals(j)/energyStorage.n_battery - sum(hotelMatrix(:,j).*hotelDrawRate')*timeIntervals(j)/energyStorage.n_battery, 0);
 
                 % Calc new 'current' battery for start of next interval
-                eStorageBattInit = eStorageBattInit + pwrOverflowRate.*timeIntervals(j) - energyStorage.hotelLoad.*timeIntervals(j)/energyStorage.n_battery/energyStorage.n_powerTransfer - sum(chargingMatrix(:,j).*chargingDrawRate')*timeIntervals(j)/energyStorage.n_battery - sum(hotelMatrix(:,j).*hotelDrawRate')*timeIntervals(j)/energyStorage.n_battery - powerDumps(j);  % est. wec battery at beginning of next interval (prev batt + power gen - power draw - power dumped)
+                eStorageBattInit = eStorageBattInit + pwrOverflowRate.*timeIntervals(j) - energyStorage.hotelLoad.*timeIntervals(j)/energyStorage.n_battery/energyStorage.n_powerTrnsfr - sum(chargingMatrix(:,j).*chargingDrawRate')*timeIntervals(j)/energyStorage.n_battery - sum(hotelMatrix(:,j).*hotelDrawRate')*timeIntervals(j)/energyStorage.n_battery - powerDumps(j);  % est. wec battery at beginning of next interval (prev batt + power gen - power draw - power dumped)
             
                 % Intermediate battery level flag
                 if eStorageBattInit < 0
@@ -193,7 +230,7 @@ classdef EnergyStorage < handle
 
             totPwrDump = sum(powerDumps); 
             
-            eStorageFutureBattery = energyStorage.battery + totPwrOverflow - totPwrDump - energyStorage.hotelLoad*(t_return - simTime)/energyStorage.n_battery/energyStorage.n_powerTransfer - totalDraw;
+            eStorageFutureBattery = energyStorage.battery + totPwrOverflow - totPwrDump - energyStorage.hotelLoad*(t_return - simTime)/energyStorage.n_battery/energyStorage.n_powerTrnsfr - totalDraw;
 
             if eStorageFutureBattery < 0 
                 eStorageNoBatteryFlag = 1; 

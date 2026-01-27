@@ -9,6 +9,9 @@
 *slx.original
 # Ignore local scratch file
 scratch.m
+# Ignore outputData file and contents
+**/outputData/*
+outputData/
 
 ----------
 

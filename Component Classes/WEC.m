@@ -36,20 +36,53 @@ classdef WEC < handle
     methods
 
         %% Constructor: Creates & returns an object
-        function wec = WEC(model)
-            % Creates an object given the WEC model 
+        function wec = WEC(varargin)
+            % WEC object constructor generates an object with default
+            % property values if given no inputs. Default configuration can
+            % be changed using the following optional name-value pair
+            % inputs: 
+            % - model: String label for the WEC model
+            % - charDim: [m] Characteristic dimension of the WEC. Default
+            %    is 1.5
+            % - hotelLoad: [W] Baseline power usage of the WEC. Default is
+            %    50 W
+            % - n_hydro: Hydrodynamic efficiency [0.XX]. default is calculated
+            %    from characteristic dimension (Driscol '19)
+            % - n_gen: Generator efficiency [0.XX] Default is 0.90
+            % - n_battery: Battery efficiency [0.XX] Default is 0.90; 
+            % - maxBattery: [Wh] Total battery capacity. Default is 500 Wh
 
-            switch model
-                case 'generic'
-                    wec.model = model;
-                    wec.charDim = 1.5;  
-                    wec.hotelLoad = 50;  % generic, colleague's estimate (thanks to Corey Crisp)
-                    wec.n_hydro = (1.3*wec.charDim + 5.6)/100;  % Babarit, A. 2015 from Driscol '19
-                    wec.n_gen = 0.8;  % Driscol '19,  Chen '24
-                    wec.n_battery = 0.90;  % Chen '24
-                    wec.maxBattery = 500;  % [Wh] generic small battery to support a few hours of hotel load
-                otherwise
-                    error('WEC model not yet supported. Update WEC class file to support this model.')
+            % Set up input parser
+            p = inputParser; 
+            p.FunctionName = 'WEC';
+
+            % Name-Value pair inputs w/ empty defaults:
+            addParameter(p, 'model', [], @(x) ischar(x) || isstring(x)); 
+            addParameter(p, 'charDim', [], @isnumeric);
+            addParameter(p, 'hotelLoad', [], @isnumeric);
+            addParameter(p, 'n_hydro', [], @isnumeric);
+            addParameter(p, 'n_gen', [], @isnumeric);
+            addParameter(p, 'n_battery', [], @isnumeric);
+            addParameter(p, 'maxBattery', [], @isnumeric);
+
+            % parse inputs
+            parse(p, varargin{:});
+            inputStruct = p.Results; 
+
+            % Assign user-input and/or default values
+            args = {'model', 'charDim', 'hotelLoad', 'n_hydro', 'n_gen', 'n_battery', 'maxBattery'};
+            argDefaults = {'generic', 1.5, 50, [], 0.8, 0.9, 500}; 
+            for i = 1:numel(args)
+                val = inputStruct.(args{i}); 
+                if isempty(val)
+                    wec.(args{i}) = argDefaults{i};  % Assign default to empty input
+                else
+                    wec.(args{i}) = val;  % Assign user-input value
+                end
+            end
+
+            if isempty(wec.n_hydro)
+                wec.n_hydro = (1.3*wec.charDim + 5.6)/100;  % Babarit, A. 2015 from Driscol '19
             end
 
         end % constructor fn

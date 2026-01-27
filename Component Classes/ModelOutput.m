@@ -10,34 +10,34 @@ classdef ModelOutput < handle
     
     properties
         % Model Input Properties
-        simTime             % Time series vector used for simulation    
-        depVar              % Dependent variable chosen for simulation
-        seaState            % sea state
-        meanPowerGen        % [W] Mean value
-        powerGenMeans       % [W] Time series of power gen throughout simulation
-        resourceDataType    % String describing input type
+        simTime (:,1) {mustBeNumeric}  % Time series vector used for simulation. Default is 1 week with 30 s timesteps   
+        depVar (1,1) string {mustBeMember(depVar, ["AUV Model", "WEC Power Gen / Wave Resource"])} = "AUV Model"  % Dependent variable chosen for simulation. Default compares AUV models
+        seaState  % Sea State.
+        meanPowerGen {mustBeNumeric}  % [W] Mean value of power gen. Default is generic 1.3 kW
+        powerGenMeans {mustBeNumeric}  % [W] Time series of power gen throughout simulation
+        resourceDataType (1,1) {mustBeMember(resourceDataType, [1,2,3,4,5,6])} = 4  % String describing input type. Default (4) is time series of wave specs
         dataIn              % Input data specifics
-        userDefinedBattery  % 1 - User input max battery / 0 - model outputs battery capacity
-        centralBatteryCapacity  % Vector containing total energy storage of central battery (1) [Wh]
-        incorpStagger       % 1 - Incorporates even stagger between AUV deployments. 0 - No stagger introduced into the mission scheduling logic
-        maxFleetSize        % 0 - No maximum fleet size imposed. <nonzero> - maximum AUV fleet size
+        userDefinedBattery (1,1) {mustBeNonnegative} = 0  % 0 - model outputs battery capacity, otherwise, user-inputs max central battery capacity
+        centralBatteryCapacity (1,:) cell  % Vector containing total energy storage of central battery for each simulation [Wh]
+        incorpStagger (1,1) {mustBeMember(incorpStagger, [1,0])} = 1  % 1 - Incorporates even stagger between AUV deployments. 0 - No stagger introduced into the mission scheduling logic
+        maxFleetSize (1,1) {mustBeNonnegative} = 0  % 0 - No maximum fleet size imposed. <nonzero> - maximum AUV fleet size
 
         % Model Output Properties
-        fleetSize         % (1xm) Array with number of AUVs in fleet for each test case
-        auvMissionLength    % [hr] Could be 1x1 or 1xm depending on if mission length changes between test cases
-        ratePwrUsed         % [W] Rate AUV uses power (power used during mission + recharge [Wh] / mission + recharge time [h])
-        energyStorageBatteryLvl  % [Wh] Battery level of central energy storage as a function of time with rows corresponding to time steps and columns corresponding to test cases
-        wecBatteryLvl       % [Wh] Battery level of WEC as a function of time with rows corresponding to time steps and columns corresponding to test cases
-        auvBatteryLvl       % [Wh] Battery level of AUV(s) as a function of time. Cell array with columns corresponding to test case. Each array item is a nxm matrix with n = timesteps and m = auv number
-        auvSchedule         % Operational state schedule of AUV(s) as a function of time with 1) Executing AUV mission, 2) AUV recharging, 3) AUV docked & fully charged. Organized in the same manner as 'auvBatteryLvl'. 
-        auvTimeOnMission    % [h] Time each AUV spends 'on-mission' during the simulation. Cell array with columns corresponding to test case. Each array item is a 1xm matrix with m corresponding to the number of AUVs in fleet.
-        auvTimeOnMissionCorrected   % [h] Time each AUV spends 'on-mission' after all AUVs are deployed in the case of a staggered deployment. Empty if deployment stagger not incorporated. Used for performance calculations using an adjusted domain to exclude time when AUVs are artificially held at dock
-        auvModels           % Model(s) of auv used for simulation
-        auvFleet            % Cell array containing auv fleet for each test case
+        fleetSize (1,:) {mustBeNumeric}  % (1xm) Array with number of AUVs in fleet for each test case
+        auvMissionLength (1,:) {mustBeNumeric}  % [hr] Could be 1x1 or 1xm depending on if mission length changes between test cases
+        ratePwrUsed (1,:) {mustBeNumeric}  % [W] Rate AUV uses power (power used during mission + recharge [Wh] / mission + recharge time [h])
+        energyStorageBatteryLvl {mustBeNumeric} % [Wh] Battery level of central energy storage as a function of time with rows corresponding to time steps and columns corresponding to test cases
+        wecBatteryLvl {mustBeNumeric}  % [Wh] Battery level of WEC as a function of time with rows corresponding to time steps and columns corresponding to test cases
+        auvBatteryLvl (1,:) cell  % [Wh] Battery level of AUV(s) as a function of time. Cell array with columns corresponding to test case. Each array item is a nxm matrix with n = timesteps and m = auv number
+        auvSchedule (1,:) cell  % Operational state schedule of AUV(s) as a function of time with 1) Executing AUV mission, 2) AUV recharging, 3) AUV docked & fully charged. Organized in the same manner as 'auvBatteryLvl'. 
+        auvTimeOnMission (1,:) cell  % [h] Time each AUV spends 'on-mission' during the simulation. Cell array with columns corresponding to test case. Each array item is a 1xm matrix with m corresponding to the number of AUVs in fleet.
+        auvTimeOnMissionCorrected (1,:) cell  % [h] Time each AUV spends 'on-mission' after all AUVs are deployed in the case of a staggered deployment. Empty if deployment stagger not incorporated. Used for performance calculations using an adjusted domain to exclude time when AUVs are artificially held at dock
+        auvModels (1,:) cell  % Model(s) of auv used for simulation
+        auvFleet (1,:) cell  % Cell array containing auv fleet for each test case
     end
 
     properties (Hidden = true)
-        fleetNumber         % Legacy variable name for fleetSize, needed to read old data
+        fleetNumber  % Legacy variable name for fleetSize, needed to read old data
     end
     
     
@@ -45,19 +45,27 @@ classdef ModelOutput < handle
     methods
 
         %% Constructor
-        function modOut = ModelOutput(simTime, depVar, resourceDataType)
-            % MODELOUT Constructs an instance of this class
+        function modOut = ModelOutput(simTime, depVar, resourceDataType, auvModels)
+            arguments
+                simTime (:,1) {mustBeNumeric} = (30:30:(7*24*60*60))'/60/60
+                depVar (1,1) string {mustBeMember(depVar, ["AUV Model", "WEC Power Gen / Wave Resource"])} = "AUV Model" 
+                resourceDataType (1,1) {mustBeMember(resourceDataType, [1,2,3,4,5,6])} = 4 
+                auvModels = [{'A'}, {'B'}, {'C'}, {'D'}, {'E'}, {'F'}, {'G'}, {'H'}, {'I'}, {'J'}, {'K'}, {'L'}, {'M'}, {'N'}, {'O'}, {'P'}, {'Q'}, {'R'}, {'S'}, {'T'}, {'U'}];
+            end
 
             modOut.simTime = simTime;
             modOut.depVar = depVar;
             modOut.resourceDataType = resourceDataType;
 
-            switch depVar
-                case 'AUV Model'
-                    modOut.auvModels = [{'A'}, {'B'}, {'C'}, {'D'}, {'E'}, {'F'}, {'G'}, {'H'}, {'I'}, {'J'}, {'K'}, {'L'}, {'M'}, {'N'}, {'O'}, {'P'}, {'Q'}, {'R'}, {'S'}, {'T'}, {'U'}];
-                
-                case 'WEC Power Gen / Wave Resource'
-                case 'Battery Specs'
+            if nargin < 4
+                switch depVar
+                    case 'AUV Model'
+                        modOut.auvModels = [{'A'}, {'B'}, {'C'}, {'D'}, {'E'}, {'F'}, {'G'}, {'H'}, {'I'}, {'J'}, {'K'}, {'L'}, {'M'}, {'N'}, {'O'}, {'P'}, {'Q'}, {'R'}, {'S'}, {'T'}, {'U'}];
+                    case 'WEC Power Gen / Wave Resource'
+                        modOut.auvModels = [];
+                end
+            else
+                modOut.auvModels = auvModels;
             end
 
         end  % constructor fn
@@ -114,9 +122,9 @@ classdef ModelOutput < handle
                 modOut.fleetSize = modOut.fleetNumber; 
             end
             
-            for i = 1:length(modOut.fleetSize)  % For each system in the simulation batch  
-                    t_m = modOut.auvFleet{1,i}{1,1}.missionSpecs(2); 
-                    t_r = modOut.auvFleet{1,i}{1,1}.chargeTime;
+            for i = length(modOut.fleetSize):-1:1  % For each system in the simulation batch  
+                    t_m = modOut.auvFleet{1,i}(1,1).missionSpecs(2); 
+                    t_r = modOut.auvFleet{1,i}(1,1).chargeTime;
                     t_c(i) = t_m+t_r;
             end
             
@@ -156,7 +164,7 @@ classdef ModelOutput < handle
             % Plot NORMALIZED time on-mission vs Normalized Power w/ Fleet Size color bar ----------------------
             maxAggregateTime = zeros(size(modOut.fleetSize));  % preallocate
             for i = 1:length(modOut.fleetSize)  % For each system in the simulation batch  
-                    t_m = modOut.auvFleet{1,i}{1,1}.missionSpecs(2); 
+                    t_m = modOut.auvFleet{1,i}(1,1).missionSpecs(2); 
 
                     if modOut.incorpStagger == 1
                         t_auvDomain = modOut.simTime(end) - ((t_c(i))/modOut.fleetSize(i))*[0:1:(modOut.fleetSize(i)-1)];  % Time from initial deployment of AUV to the end of the simulation

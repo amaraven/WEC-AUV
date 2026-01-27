@@ -42,7 +42,7 @@
 
 
 %% Preliminaries
-% profile on;
+tic % profile on;
 clear; % close ; clc
 warning('on')
 warning('OFF', 'MATLAB:table:ModifiedAndSavedVarnames')
@@ -78,7 +78,7 @@ if userPrompts == 0
        
         case 'WEC Power Gen / Wave Resource'  % Pick one auv model, run through all sea states
             auvModelNum = 18; 
-            auv = AUV(auvModels{auvModelNum}); 
+            auv = AUV(model=auvModels{auvModelNum}); 
     end
 
     % ---------------------------------------------------------------------
@@ -122,8 +122,16 @@ else
         'AUV Model','WEC Power Gen / Wave Resource', 'AUV Model'); 
     
     if strcmp(depVar, 'WEC Power Gen / Wave Resource')
-            auvModelNum = listdlg('PromptString',{'Choose AUV model.'}, 'SelectionMode', 'single','ListString', {'A','B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S','T','U'});
-            auv = AUV(auvModels{auvModelNum}); 
+            auvModelNum = listdlg('PromptString',{'Choose AUV model.'}, 'SelectionMode', 'single','ListString', {'A','B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S','T','U','Custom'});
+            if auvModelNum == 22
+                prompt = {'Enter AUV mass [kg]:','Enter mission specs:','Enter battery capacity [Wh]:','Enter recharge rate [W]','Enter charge method (1 for wired OR 2 for wireless):','Enter hotel load [W]:','Enter recharge threshold (0.XX):','Enter battery efficiency (0.XX)','Enter power transfer efficiency (0.XX):'};
+                fieldsize = [1 45; 1, 45; 1 45; 1 45; 1 45; 1 45; 1 45; 1 45; 1 45];
+                defaults = {'100','[1, 10, 0.8]','1000','200','1','[]','0.20','0.9','[]'};
+                auvSpecs = inputdlg(prompt, 'Enter AUV Properties', fieldsize, defaults);
+                auv = AUV(model='Custom', mass=eval(auvSpecs{1}), missionSpecs=eval(auvSpecs{2}), maxBattery=eval(auvSpecs{3}), chargeRate=eval(auvSpecs{4}), chargeMethod=eval(auvSpecs{5}), hotelLoad=eval(auvSpecs{6}), rechargeThreshold=eval(auvSpecs{7}), n_battery=eval(auvSpecs{8}), n_powerTransfer=eval(auvSpecs{9}));
+            else
+                auv = AUV(model=auvModels{auvModelNum}); 
+            end
     end
     
     
@@ -157,7 +165,7 @@ modOut = ModelOutput(modIn.simTime, depVar, resourceDataType);
 modOut.incorpStagger = incorpStagger;
 modOut.maxFleetSize = maxFleetSize;
 
-wec = WEC('generic');
+wec = WEC();
 
 % Calculate dependent variable loop length
 switch modIn.depVar
@@ -190,10 +198,10 @@ end
 %% Generate central energy storage object
 
 if userDefinedBattery ~=0
-    energyStorage = EnergyStorage(userDefinedBattery, 10, 20); 
+    energyStorage = EnergyStorage(maxBattery=userDefinedBattery); 
 
 else  % userDefinedBattery == 0 - using code-calculated size
-    energyStorage = EnergyStorage([], 10, 20);  % Empty battery storage will be rewritten after fleet size determination...
+    energyStorage = EnergyStorage();  % Empty battery storage will be rewritten after fleet size determination...
 end
 
 modOut.userDefinedBattery = userDefinedBattery; 
@@ -211,13 +219,13 @@ for depVarCount = 1:loopLength
         case 'AUV Model'
             % Clear auv object, make a new one (pwr gen already calculated)
             clear auv
-            auv = AUV(modIn.auvModels{depVarCount}); 
+            auv = AUV(model=modIn.auvModels{depVarCount}); 
 
 
         case 'WEC Power Gen / Wave Resource'
             % Clear wec object, make a new one, calculate power gen
             clear wec
-            wec = WEC('generic');
+            wec = WEC();
             modIn.calcPowerGen(wec, modOut, depVarCount);
 
     end
@@ -253,11 +261,11 @@ for depVarCount = 1:loopLength
         wec.calcLowPower(modIn.resourceDataType, modIn.dt, auv); 
 
         lowPowerOverflow = wec.lowPowerGen -  wec.hotelLoad/(wec.n_battery^2);  % Assumes wec is already at max battery
-        minBattery = ( auv.chargeLoad(auv.mission)*modOut.fleetSize(depVarCount)/energyStorage.n_battery + auv.chargeTime(auv.mission)*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTransfer - lowPowerOverflow*auv.chargeTime(auv.mission)*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  ) *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
+        minBattery = ( auv.chargeLoad(auv.mission)*modOut.fleetSize(depVarCount)/energyStorage.n_battery + auv.chargeTime(auv.mission)*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - lowPowerOverflow*auv.chargeTime(auv.mission)*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  ) *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
 
         if minBattery < 0  % Somewhat arbituary minimum battery if pGen > operating loads
             warning('Problem with minimum battery calculation. Using default value for this simulation.')
-            minBattery = 0.25 * ( auv.chargeLoad(auv.mission)*modOut.fleetSize(depVarCount)/energyStorage.n_battery + auv.chargeTime(auv.mission)*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTransfer ); 
+            minBattery = 0.25 * ( auv.chargeLoad(auv.mission)*modOut.fleetSize(depVarCount)/energyStorage.n_battery + auv.chargeTime(auv.mission)*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr ); 
         end
  
         % Clear battery storage for new simulation if battery amount is not user-input
@@ -279,9 +287,9 @@ for depVarCount = 1:loopLength
             % Build fleet
             switch modIn.depVar
                 case 'AUV Model'
-                    auvFleet = arrayfun(@(x) AUV(modIn.auvModels{depVarCount}), 1:modOut.fleetSize(depVarCount));  
+                    auvFleet = arrayfun(@(x) AUV(model=modIn.auvModels{depVarCount}), 1:modOut.fleetSize(depVarCount));  
                 case 'WEC Power Gen / Wave Resource'
-                    auvFleet = arrayfun(@(x) AUV(modIn.auvModels), 1:modOut.fleetSize(depVarCount));
+                    auvFleet = arrayfun(@(x) AUV(model=modIn.auvModels), 1:modOut.fleetSize(depVarCount));
             end
 
             modOut.auvFleet{depVarCount} = auvFleet;  % save to model output object. 
@@ -381,3 +389,4 @@ save('outputData/usWestCoast_03Dec25.mat','auv','energyStorage','modOut','modIn'
 %% Simulation Meta
 % profile off; profile viewer;
 beep
+toc
