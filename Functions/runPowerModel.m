@@ -84,6 +84,11 @@ for i = 1:length(simTime)
     %% AUV Battery
     % Calculate and save AUV battery level(s)
     arrayfun(@(auv) auv.calcBatteryLvl(simTime(i)), auvFleet); 
+    % [batteryLvls, wecBatteryDraw] = AUV.calcBatteryLvlArray(auvFleet, simTime(i));
+    % for idx = 1:length(auvFleet)
+    %     auvFleet(idx).battery(2) = batteryLvls(idx); 
+    %     auvFleet(idx).wecBatteryDraw = wecBatteryDraw(idx); 
+    % end   
     intBatteries = [auvFleet.battery];
     auvBatteryLvl(i,:) = intBatteries(2,:);
     

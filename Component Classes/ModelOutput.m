@@ -18,7 +18,7 @@ classdef ModelOutput < handle
         resourceDataType (1,1) {mustBeMember(resourceDataType, [1,2,3,4,5,6])} = 4  % String describing input type. Default (4) is time series of wave specs
         dataIn              % Input data specifics
         userDefinedBattery (1,1) {mustBeNonnegative} = 0  % 0 - model outputs battery capacity, otherwise, user-inputs max central battery capacity
-        centralBatteryCapacity (1,:) cell  % Vector containing total energy storage of central battery for each simulation [Wh]
+        centralBatteryCapacity (1,:) {mustBeNumeric}  % Vector containing total energy storage of central battery for each simulation [Wh]
         incorpStagger (1,1) {mustBeMember(incorpStagger, [1,0])} = 1  % 1 - Incorporates even stagger between AUV deployments. 0 - No stagger introduced into the mission scheduling logic
         maxFleetSize (1,1) {mustBeNonnegative} = 0  % 0 - No maximum fleet size imposed. <nonzero> - maximum AUV fleet size
 

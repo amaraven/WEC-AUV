@@ -42,7 +42,7 @@
 
 
 %% Preliminaries
-tic % profile on;
+tic; profile on;
 clear; % close ; clc
 warning('on')
 warning('OFF', 'MATLAB:table:ModifiedAndSavedVarnames')
@@ -213,18 +213,16 @@ for depVarCount = 1:loopLength
 
     %% Prep variables (power gen & auv model(s))
 
-    clearvars -except modIn modOut auv wec energyStorage depVarCount
+    % clearvars -except modIn modOut auv wec energyStorage depVarCount
 
     switch modIn.depVar
         case 'AUV Model'
-            % Clear auv object, make a new one (pwr gen already calculated)
-            clear auv
+            % Reset AUV object (pwr gen independent of dep. var.)
             auv = AUV(model=modIn.auvModels{depVarCount}); 
 
 
         case 'WEC Power Gen / Wave Resource'
-            % Clear wec object, make a new one, calculate power gen
-            clear wec
+            % Reset WEC object, calculate power gen
             wec = WEC();
             modIn.calcPowerGen(wec, modOut, depVarCount);
 
@@ -241,7 +239,7 @@ for depVarCount = 1:loopLength
             modOut.fleetSize(depVarCount) = modOut.fleetSize(depVarCount) - 1;
 
             % clear values from prev simulation
-            clear modOut.energyStorageBatteryLvl modOut.wecBatteryLvl modOut.auvBatteryLvl modOut.auvSchedule modOut.auvTimeOnMission
+            % clear modOut.energyStorageBatteryLvl modOut.wecBatteryLvl modOut.auvBatteryLvl modOut.auvSchedule modOut.auvTimeOnMission
 
         else
             modOut.fleetSize(depVarCount) = calcFleetSize(wec, auv, energyStorage, modIn.maxFleetSize);  % initial calculation
@@ -333,7 +331,7 @@ for depVarCount = 1:loopLength
             else
                 runFleetCalc = 0;
 
-                modOut.centralBatteryCapacity{depVarCount} = [energyStorage.maxBattery];
+                modOut.centralBatteryCapacity(depVarCount) = [energyStorage.maxBattery];
 
     
             end 
@@ -387,6 +385,6 @@ save('outputData/usWestCoast_03Dec25.mat','auv','energyStorage','modOut','modIn'
 %}
 
 %% Simulation Meta
-% profile off; profile viewer;
+profile off; profile viewer;
 beep
 toc

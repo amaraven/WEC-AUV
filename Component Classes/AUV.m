@@ -30,7 +30,7 @@ classdef AUV < handle
         opTimeComplete  % [hr] Time current opState will be complete
         battery         % Vector containing battery level at the end of the last operational state (battery(1)) and the current battery level (battery(2)) [Wh] ([B(i-1); B(i)]). battery(1) corresponds to timestamp saved as opState(2)
         batteryTime     % [hr] Time corresponding to the current battery level (battery(2)) - NOTE: Not currently used externally as of 8/14/25    
-        wecBatteryDraw  % [W] Time series of energy draw level (0 if not charging) with wecBatteryDraw(end) corresponding with current draw level
+        wecBatteryDraw  % [W] Energy draw level (0 if not charging) associated with current battery and batteryTime
         rechargeThreshold % [0.XX] Percentage of battery to recharge at. Default is 20%
 
     end
@@ -362,14 +362,15 @@ classdef AUV < handle
             % simTime - [hr] Simulation time scalar 
             % 
             % OUTPUTS: 
-            % wec.battery - [Wh] Vector containing battery level at the end 
+            % auv.battery - [Wh] Vector containing battery level at the end 
             %   of the last operational state (battery(1)), and the current
             %   battery level (battery(2)). battery(1) corresponds to
             %   the timestamp saved as opState(2), and battery(2) 
             %   corresponds to the timestep saved as wec.batteryTime
-            % wec.batteryTime - [hr] timestep of most recent battery level
+            % auv.batteryTime - [hr] timestep of most recent battery level
             %   saved as battery(2)
 
+            % local vars
 
             stateTime = simTime - auv.opState(2); 
 
@@ -377,9 +378,8 @@ classdef AUV < handle
                 case 1  % AUV executing mission
                     ratePowerUse = auv.missionSpecs(auv.mission, 3)*auv.maxBattery / auv.missionSpecs(auv.mission, 2);  % rate = Battery Wh used / time to use energy
                     auv.battery(2) = auv.battery(1) - ratePowerUse*stateTime;
-                    auv.batteryTime = simTime;
 
-                    auv.wecBatteryDraw = 0; 
+                    newBatteryDraw = 0; 
                 
                 case 2  % AUV docked & recharging
                     tempBattery = NaN;  
@@ -412,32 +412,29 @@ classdef AUV < handle
     
                             if t_newBatteryCalc >= t_100
                                 auv.battery(2) = auv.maxBattery;
-                                auv.wecBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;
+                                newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;
     
                             else
                                 auv.battery(2) = rateLinPowerTransfer*( t_newBatteryCalc - (rateLinPowerTransfer*t_newBatteryCalc^2 / (0.8*auv.maxBattery)) ) + 0.8*auv.maxBattery;
-                                auv.wecBatteryDraw = (rateLinPowerTransfer.*( 1 - rateLinPowerTransfer*t_newBatteryCalc/(0.4*auv.maxBattery) ) + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery;  % [W] (d/dt of above + hotel load)
+                                newBatteryDraw = (rateLinPowerTransfer.*( 1 - rateLinPowerTransfer*t_newBatteryCalc/(0.4*auv.maxBattery) ) + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery;  % [W] (d/dt of above + hotel load)
 
                             end
 
                     else  % Battery calculation stays in linear region
-                        if isnan(tempBattery)
-                            error('AUV battery calculation error')
-                        end
-                        
                         auv.battery(2) = tempBattery; 
-                        auv.wecBatteryDraw = (rateLinPowerTransfer + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery * ones(length(stateTime), 1);  % [W]
+                        newBatteryDraw = (rateLinPowerTransfer + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery * ones(length(stateTime), 1);  % [W]
 
                     end
 
-                    auv.batteryTime = simTime;
-
                 case 3  % AUV battery full or WEC in low power mode, WEC recharging itself while supporting auv hotel needs
-                    auv.battery(2) = auv.battery(2);  
-                    auv.batteryTime = simTime; 
-                    auv.wecBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;  % Drawing enough from WEC to stay at full charge 
+                    newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;  % Drawing enough from WEC to stay at full charge 
             
             end  % operational cases
+            
+            auv.batteryTime = simTime; 
+            if abs(newBatteryDraw - auv.wecBatteryDraw) < 0.01
+                auv.wecBatteryDraw = newBatteryDraw; 
+            end
             
         end  % fn calcBatteryLvl
 
@@ -497,4 +494,108 @@ classdef AUV < handle
         end  % fn changeOpState
 
     end  % Instance Methods
+
+    %{
+    methods (Static)
+        function [batteryLvls, wecBatteryDraw] = calcBatteryLvlArray(auvArray, simTime)
+            % Calculates battery level(s) for AUV(s) at a given time
+            % (simTime) assuming no changes in operational state since the
+            % last battery calculation 
+            % 
+            % INPUTS: 
+            % auvArray - Array of AUV objects (1 x N)
+            % simTime - scalar simulation time for battery calculation
+            %
+            % OUTPUTS: 
+            % batteryLvls - [Wh] (1 x N) Current battery level(s) for each
+            % AUV (columns)
+            % batteryDraw - [W] (1, N) Battery draw for each AUV in array
+
+            N = numel(auvArray); 
+            batteryLvls = zeros(1, N);
+            wecBatteryDraw = zeros(1, N); 
+
+            for k = 1:N
+                % Extract values from inputs
+                opState = auvArray(k).opState; 
+                battery = auvArray(k).battery; 
+                chargeRate = auvArray(k).chargeRate; 
+                maxBattery = auvArray(k).maxBattery; 
+                lastBatteryTime = auvArray(k).batteryTime;
+                hotelLoad = auvArray(k).hotelLoad; 
+                n_powerTransfer = auvArray(k).n_powerTransfer; 
+                n_battery = auvArray(k).n_battery;
+
+                stateTime = simTime - opState(2); 
+
+                % Compute battery level
+                switch opState(1)
+                    case 1  % AUV on-mission
+                        ratePowerUse = auvArray(k).missionSpecs(auvArray(k).mission, 3)*auvArray(k).maxBattery / auvArray(k).missionSpecs(auvArray(k).mission, 2);  % rate = Battery Wh used / time to use energy
+                        batteryLvls(k) = battery(1) - ratePowerUse*stateTime; 
+
+                        wecBatteryDraw(k) = 0; 
+
+                    case 2  % AUV docked & recharging
+                        tempBattery = NaN; 
+                        rateLinPowerTransfer = chargeRate;  % rate of charge in linear region (up to 80%) (no efficiencies applied yet)
+
+                        % Linear region
+                        if battery(2) < (0.8*maxBattery)
+                            tempBattery = battery(2) + rateLinPowerTransfer*(simTime - lastBatteryTime);
+                        end
+
+                        % Charge > 80% region
+                        if (0.8*maxBattery) <= battery(2) || (0.8*maxBattery) < tempBattery    % last battery calc'd is > 80% or temp battery just calc'd is > 80%
+                            
+                            if (0.8*maxBattery) < tempBattery
+                                t_80 = (0.8*maxBattery - battery(2))/rateLinPowerTransfer + lastBatteryTime;  % 80% charge in simulation time
+                                t_newBatteryCalc = simTime - t_80;  % Time for calculation in >80% charge curve (relative to 80% Batt at t = 0)
+    
+                            else  % calc ctime corresponding to the last-calculated battery lvl (t_current)
+                                t_current = (0.4*maxBattery / rateLinPowerTransfer)*(1 - sqrt( 1+ (4*maxBattery - 5*battery(2))/maxBattery ) );  
+                                dt = simTime - lastBatteryTime; 
+                                if dt < 0 
+                                    error('dt outside of expected range during auv battery calculation')
+                                end
+        
+                                t_newBatteryCalc = t_current + dt;
+                                
+                            end
+                            t_100 = 0.4*maxBattery / rateLinPowerTransfer; 
+                            
+                            if t_newBatteryCalc >= t_100
+                                batteryLvls(k) = maxBattery;
+                                wecBatteryDraw(k) = hotelLoad / n_powerTransfer / n_battery;
+        
+                            else
+                                batteryLvls(k) = rateLinPowerTransfer*( t_newBatteryCalc - (rateLinPowerTransfer*t_newBatteryCalc^2 / (0.8*maxBattery)) ) + 0.8*maxBattery;
+                                wecBatteryDraw(k) = (rateLinPowerTransfer.*( 1 - rateLinPowerTransfer*t_newBatteryCalc/(0.4*maxBattery) ) + hotelLoad) / n_powerTransfer /n_battery;  % [W] (d/dt of above + hotel load)
+        
+                            end
+
+                        else  % Battery calculation stays in linear region
+                            if isnan(tempBattery)
+                                error('AUV battery calculation error')
+                            end
+                            
+                            batteryLvls(k) = tempBattery; 
+                            wecBatteryDraw(k) = (rateLinPowerTransfer + hotelLoad) / n_powerTransfer /n_battery * ones(length(stateTime), 1);  % [W]
+    
+                        end
+
+                case 3  % AUV battery full or WEC in low power mode, WEC recharging itself while supporting auv hotel needs
+                    batteryLvls(k) = battery(2);  
+                    wecBatteryDraw(k) = hotelLoad / n_powerTransfer / n_battery;  % Drawing enough from WEC to stay at full charge 
+
+                end
+
+
+            end
+
+
+        end  % calc battery lvl array
+
+    end  % static methods
+    %}
 end  % class def
