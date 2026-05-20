@@ -12,21 +12,27 @@ classdef WEC < handle
     % Currently supported models include the following: 
     % 'generic' - A generic placeholder! How exciting.
 
-    properties
+    properties (GetAccess = public, SetAccess = private)
+        % Constants
         model           % Model of WEC
         charDim         % [m] Characteristic dimension (sqrt(4*A/pi) w/ A = device's max horizontal cross-sectional area)
-        maxBattery      % [Wh] Total energy storage onboard
-        powerGen        % [W] Rate of energy generation (given wave profile)
-        powerGenTime    % [h] Time series corresponding to energy generation
+        batteryCapacity % [Wh] Total energy storage onboard
         hotelLoad       % [W] Baseline power usage of WEC
         n_hydro         % [0.XX] Hydrodynamic efficiency (used in calcPowerGen if model input is wave resource information)
         n_gen           % [0.XX] Generator efficiency (same as above)
         n_battery       % [0.XX] Battery efficiency (losses during charge & discharge)
-        battery         % [Wh] Vector of battery levels throughout simulation
+    end
+
+    % Variables
+    properties (Access = public)
+        battery         % [Wh] Value of current battery level
+        % powerGenTime    % [h] Time series corresponding to energy generation
+        % powerGen        % [W] Rate of energy generation (given wave profile)
         powerGenMeans   % [W] Rate of energy generation given wave profile at simulation timesteps (mean values of power at data timesteps)
         meanPowerGen    % [W] Mean value of power generation 
         lowPowerGen     % [W] Mean of lowest generation window (window sized to accomodate AUV charging) OR 0.75% of mean for constant resource inputs
     end
+    
     properties (Dependent)
         lowBatteryLvl   % [Wh] Battery level that triggers 'low power mode' (stops charging AUV(s), only supports hotel loads)
     end
@@ -36,54 +42,34 @@ classdef WEC < handle
     methods
 
         %% Constructor: Creates & returns an object
-        function wec = WEC(varargin)
-            % WEC object constructor generates an object with default
-            % property values if given no inputs. Default configuration can
-            % be changed using the following optional name-value pair
-            % inputs: 
-            % - model: String label for the WEC model
-            % - charDim: [m] Characteristic dimension of the WEC. Default
-            %    is 1.5
-            % - hotelLoad: [W] Baseline power usage of the WEC. Default is
-            %    50 W
-            % - n_hydro: Hydrodynamic efficiency [0.XX]. default is calculated
-            %    from characteristic dimension (Driscol '19)
-            % - n_gen: Generator efficiency [0.XX] Default is 0.90
-            % - n_battery: Battery efficiency [0.XX] Default is 0.90; 
-            % - maxBattery: [Wh] Total battery capacity. Default is 500 Wh
-
-            % Set up input parser
-            p = inputParser; 
-            p.FunctionName = 'WEC';
-
-            % Name-Value pair inputs w/ empty defaults:
-            addParameter(p, 'model', [], @(x) ischar(x) || isstring(x)); 
-            addParameter(p, 'charDim', [], @isnumeric);
-            addParameter(p, 'hotelLoad', [], @isnumeric);
-            addParameter(p, 'n_hydro', [], @isnumeric);
-            addParameter(p, 'n_gen', [], @isnumeric);
-            addParameter(p, 'n_battery', [], @isnumeric);
-            addParameter(p, 'maxBattery', [], @isnumeric);
-
-            % parse inputs
-            parse(p, varargin{:});
-            inputStruct = p.Results; 
+        function wec = WEC(model, characteristicDimension, batteryCapacity, hotelLoad, n_hydro, n_gen, n_battery)
+            % WEC object constructor generates an object with the given
+            % properties. Default values are used if no inputs are given.
+            arguments
+                model (1,1) string = 'Default WEC'  % String containing model name
+                characteristicDimension (1,1) {mustBeNumeric, mustBePositive} = 1.5  % [m] Characteristic dimension of WEC
+                batteryCapacity (1,1) {mustBeNumeric, mustBePositive} = 500  % [Wh] Total energy storage onboard
+                hotelLoad (1,1) {mustBeNumeric, mustBeNonnegative} = 50  % [W] Baseline power usage
+                n_hydro (1,1) {mustBeNumeric, mustBeInRange(n_hydro, 0, 1, 'exclude-lower')} = []  % [0.XX] Hydrodynamic efficiency
+                n_gen (1,1) {mustBeNumeric, mustBeInRange(n_gen, 0, 1, 'exclude-lower')} = 0.8  % [0.XX] Generator efficiency
+                n_battery   (1,1) {mustBeNumeric, mustBeInRange(n_battery, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Battery efficiency                
+            end
 
             % Assign user-input and/or default values
-            args = {'model', 'charDim', 'hotelLoad', 'n_hydro', 'n_gen', 'n_battery', 'maxBattery'};
-            argDefaults = {'generic', 1.5, 50, [], 0.8, 0.9, 500}; 
-            for i = 1:numel(args)
-                val = inputStruct.(args{i}); 
-                if isempty(val)
-                    wec.(args{i}) = argDefaults{i};  % Assign default to empty input
-                else
-                    wec.(args{i}) = val;  % Assign user-input value
-                end
-            end
+            wec.model = model;
+            wec.charDim = characteristicDimension;
+            wec.batteryCapacity = batteryCapacity;
+            wec.hotelLoad = hotelLoad; 
+            wec.n_hydro = n_hydro;
+            wec.n_gen = n_gen;
+            wec.n_battery = n_battery;
 
             if isempty(wec.n_hydro)
                 wec.n_hydro = (1.3*wec.charDim + 5.6)/100;  % Babarit, A. 2015 from Driscol '19
             end
+
+            % Initialize WEC battery
+            wec.battery = wec.batteryCapacity;  % Initialize at 100% charge
 
         end % constructor fn
 
@@ -92,9 +78,30 @@ classdef WEC < handle
         function lowBatteryLvl = get.lowBatteryLvl(wec)
 
             % Sets the low battery level to 5% of the maximum capacity
-            lowBatteryLvl = 0.05*wec.maxBattery;  
+            lowBatteryLvl = 0.05*wec.batteryCapacity;  
         
         end
+
+        
+        %% Re-Initialize wec object
+        function reset(wec)
+            wec.battery = wec.batteryCapacity;
+        end
+
+        
+        %% Calculate 'low power' generation threshold
+        function calcLowPower(wec, resourceDataType, dt, auv)
+            switch resourceDataType
+                case{1, 2, 4, 6}
+                    chargeWindow = ceil(auv.chargeTime(auv.mission)/dt);
+                    tmpPwrGen = movmean(wec.powerGenMeans, chargeWindow);
+                    wec.lowPowerGen = min(tmpPwrGen(floor(0.5*chargeWindow) : end - floor(0.5*chargeWindow)) );  % Exclude truncated means
+                    
+                otherwise
+                    wec.lowPowerGen = 0.75*wec.meanPowerGen;
+            end
+
+        end  % low power threshold fn
         
 
         %% Energy Generation
@@ -112,13 +119,13 @@ classdef WEC < handle
             % Time series calculations
             powerData_dt = mean(diff(timeData));  
             simSeconds = powerData_dt:powerData_dt:simHrs*60*60;  % Time series for length of simulation with timestep defined by wave resource data
-            wec.powerGenTime = simSeconds'/60/60;  % Time series corresponding to powerGen in hours
+            powerGenTime = simSeconds'/60/60;  % Time series corresponding to powerGen in hours
 
             % Create vector of repeating power generation for the length of simulation.
-            wec.powerGen = powerData(mod(0:length(simSeconds)-1, length(powerData)) +1) * wec.n_gen;  
+            powerGen = powerData(mod(0:length(simSeconds)-1, length(powerData)) +1) * wec.n_gen;  
 
             % Reshape power generation according to simulation timesteps
-            powerGenReshaped = reshape(wec.powerGen, dt/(wec.powerGenTime(2)-wec.powerGenTime(1)), []);
+            powerGenReshaped = reshape(powerGen, dt/(powerGenTime(2)-powerGenTime(1)), []);
             wec.powerGenMeans = (mean(powerGenReshaped, 1))';  %  [W]   
             wec.meanPowerGen = mean(wec.powerGenMeans);  % [W]
 
@@ -203,6 +210,11 @@ classdef WEC < handle
                 elseif hours(dataDateTimes(2)-dataDateTimes(1)) < 1
                     % Down-sample data to simTime
                     wec.powerGenMeans = reshape(wecPowerGenWindowed, (simTime(2)-simTime(1))/(dataDt), []);
+
+                else
+                    % No resampling needed!
+                    wec.powerGenMeans = wecPowerGenWindowed;
+
                 end
 
                 % Save final power gen. vector
@@ -233,21 +245,6 @@ classdef WEC < handle
             end
 
         end  % calc power gen fn
-        
-
-        %% Calculate 'low power' generation threshold
-        function calcLowPower(wec, resourceDataType, dt, auv)
-            switch resourceDataType
-                case{1, 2, 4, 6}
-                    chargeWindow = ceil(auv.chargeTime(auv.mission)/dt);
-                    tmpPwrGen = movmean(wec.powerGenMeans, chargeWindow);
-                    wec.lowPowerGen = min(tmpPwrGen(floor(0.5*chargeWindow) : end - floor(0.5*chargeWindow)) );  % Exclude truncated means
-                    
-                otherwise
-                    wec.lowPowerGen = 0.75*wec.meanPowerGen;
-            end
-
-        end  % low power threshold fn
 
     end  % Instance Methods
 end  % class def

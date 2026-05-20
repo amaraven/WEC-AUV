@@ -207,7 +207,7 @@ end
 modOut.userDefinedBattery = userDefinedBattery; 
 
 
-%% Dependent Variable Loop / Run Simulation %% Could probably do this parallel..
+%% Dependent Variable Loop / Run Simulation 
 
 for depVarCount = 1:loopLength
 

@@ -9,19 +9,23 @@ classdef EnergyStorage < handle
     %
     % To crate an EnergyStorage object named 'energyStorage', use the
     % following syntax: 
-    % energyStorage = EnergyStorage(maxBattery, baseHotelLoad, dockHotelLoad)
+    % energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad, dockHotelLoad)
 
-    properties
-        maxBattery      % [Wh] Total energy storage onboard 
-        battery         % [Wh] Current battery level 
-        userDefinedBattery  % 1/0 - User input max battery / model outputs battery capacity
+    properties (GetAccess = public, SetAccess = private)
+        % userDefinedBattery  % 1/0 - User input max battery / model outputs battery capacity
         baseHotelLoad   % [W] Hotel load of unit, excluding docks
         dockHotelLoad   % [W] Hotel load of a single AUV dock
-        hotelLoad       % [W] Total baseline power usage of hardware (unit + AUV dock(s)). Defaults to base + 1 dock
         n_battery       % Battery efficiency [0.XX]
         n_wecPwrTrnsfr  % Efficiency of power transfer between WEC & central energy storage [0.XX]
-        n_powerTrnsfr % Efficiency of power transfer between central battery and docks [0.XX]
+        n_powerTrnsfr   % Efficiency of power transfer between central battery and docks [0.XX]
     end
+
+    properties (Access = public)
+        battery         % [Wh] Current battery level 
+        batteryCapacity % [Wh] Total energy storage onboard 
+        hotelLoad       % [W] Total baseline power usage of hardware (unit + AUV dock(s)). Defaults to base + 1 dock
+    end
+
     properties (Dependent)
         lowBatteryLvl;  % [Wh] Battery level that triggers 'low power' mode (stops charging AUV(s), continues to supply hotel loads)
     end
@@ -30,62 +34,39 @@ classdef EnergyStorage < handle
     methods
 
         %% Constructor: Creates & returns an EnergyStorage object
-        % function energyStorage = EnergyStorage(maxBattery, baseHotelLoad, dockHotelLoad)
-        function energyStorage = EnergyStorage(varargin)
-            % EnergyStorage object constructor. Will generate an object 
-            % with default property values with no given inputs. Default 
-            % configuration is a total battery capacity determined by the 
-            % AUV fleet requirements, a base hotel load of 10 W, dock hotel 
-            % load of 20 W, and all efficiencies are 0.90. These values can 
-            % be customized using the following optional name-value pair 
-            % inputs: 
-            % - maxBattery: [Wh] Total energy storage onboard. Default is
-            %    left empty to be calculated based on the AUV fleet needs.
-            % - baseHotelLoad: [W] Running power-draw of the central unit
-            %    (excluding dock(s)). Default is 10 W.
-            % - dockHotelLoad: [W] Running power-draw of a single AUV dock.
-            %    Default is 20 W.
-            % - n_battery: Battery efficiency [0.XX]. Default is 0.90.
-            % - n_wecPwrTrnsfr: Efficiency of power transfer between WEC
-            %    and central energy storage [0.XX]. Default is 0.90 from https://www.researchgate.net/publication/264124522_Efficiency_Comparison_of_Wire_and_Wireless_Battery_Charging_Based_on_Connection_Probability_Analysis   
-            % - n_powerTrnsfr: Efficiency of power transfer between
-            %    central battery and docks [0.XX]. Default is 0.90.
-
-            p = inputParser;
-            p.FunctionName = 'EnergyStorage';
-
-            % Name-value pair inputs w/ empty defaults
-            addParameter(p, 'maxBattery', [], @isnumeric);
-            addParameter(p, 'baseHotelLoad', [], @isnumeric);
-            addParameter(p, 'dockHotelLoad', [], @isnumeric);
-            addParameter(p, 'n_battery', [], @isnumeric);  
-            addParameter(p, 'n_wecPwrTrnsfr', [], @isnumeric);  
-            addParameter(p, 'n_powerTrnsfr', [], @isnumeric);  
-
-            % Parse inputs
-            parse(p, varargin{:});
-            inputStruct = p.Results;
-
-            % Assign user-input and/or default values
-            args = {'maxBattery', 'baseHotelLoad', 'dockHotelLoad', 'n_battery', 'n_wecPwrTrnsfr', 'n_powerTrnsfr'};
-            argDefaults = {[], 10, 20, 0.9, 0.9, 0.9};
-            for i = 1:numel(args)
-                val = inputStruct.(args{i});
-                if isempty(val)
-                    energyStorage.(args{i}) = argDefaults{i};  % Assign default
-                else
-                    energyStorage.(args{i}) = val;  % Assign user-input value
-                end
+        % function energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad, dockHotelLoad)
+        function energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad, dockHotelLoad, n_battery, n_wecPowerTransfer, n_dockPowerTransfer)
+            % EnergyStorage object constructor generates an object with the given
+            % properties. Default values are used if no inputs are given.
+            arguments
+                batteryCapacity (1,1) {mustBeNumeric, mustBeNonnegative} = 0  % Total energy storage
+                baseHotelLoad (1,1) {mustBeNumeric, mustBeNonnegative} = 10  % [W] Hotel load of unit, excluding AUV docks
+                dockHotelLoad (1,1) {mustBeNumeric, mustBeNonnegative} = 20  % [W] Hotel load of a single AUV dock
+                % userDefinedBattery (1,1) {mustBeNumeric, mustBeMember(userDefinedBattery, [0, 1])} = 0  % (1) User provided battery capacity, (0) model outputs battery capacity
+                n_battery (1,1) {mustBeNumeric,  mustBeInRange(n_battery, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Battery efficiency
+                n_wecPowerTransfer (1,1) {mustBeNumeric,  mustBeInRange(n_wecPowerTransfer, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Power transfer efficiency between the WEC & central battery
+                n_dockPowerTransfer (1,1) {mustBeNumeric,  mustBeInRange(n_dockPowerTransfer, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Power transfer efficiency between the central battery and docks
             end
+            % if batteryCapacity == 0
+            %     energyStorage.userDefinedBattery = 0;
+            % else
+            %     energyStorage.userDefinedBattery = 1;
+            % end
+            energyStorage.batteryCapacity = batteryCapacity; 
+            energyStorage.baseHotelLoad = baseHotelLoad;
+            energyStorage.dockHotelLoad = dockHotelLoad;
+            energyStorage.n_battery = n_battery;
+            energyStorage.n_wecPwrTrnsfr = n_wecPowerTransfer;
+            energyStorage.n_powerTrnsfr = n_dockPowerTransfer;
 
             % Default hotel load = base + 1 dock
             energyStorage.hotelLoad = energyStorage.baseHotelLoad + energyStorage.dockHotelLoad;  % Default value assumes 1 AUV
 
-            % Set userDefinedBattery flag
-            if isempty(energyStorage.maxBattery)
-                energyStorage.userDefinedBattery = 0; 
+            % Initialize energyStorage battery at 85% of max, if given
+            if ~( batteryCapacity == 0 || isempty(batteryCapacity) )
+                energyStorage.battery = energyStorage.batteryCapacity * 0.85;
             else
-                energyStorage.userDefinedBattery = 1; 
+                energyStorage.battery = [];
             end
 
         end  % constructor fn
@@ -94,10 +75,23 @@ classdef EnergyStorage < handle
         %% Dependent property calculations...
         function lowBatteryLvl = get.lowBatteryLvl(energyStorage)  
             % Sets lowBatteryLevel to 20% of the max capacity
-            lowBatteryLvl = energyStorage.maxBattery * 0.20; 
-
+            lowBatteryLvl = energyStorage.batteryCapacity * 0.20; 
         end  % low battery fn
         
+
+        %% Re-Initialize energyStorage Object
+        function reset(energyStorage)
+            % Initialize energyStorage battery at 85% of max, if given
+            if ~( energyStorage.batteryCapacity == 0 || isempty(energyStorage.batteryCapacity) )
+                energyStorage.battery = energyStorage.batteryCapacity * 0.85;
+            else
+                energyStorage.battery = [];
+            end
+
+            % Default hotel load = base + 1 dock
+            energyStorage.hotelLoad = energyStorage.baseHotelLoad + energyStorage.dockHotelLoad;  % Default value assumes 1 AUV
+        end
+
 
         %% Battery Estimator
         function [eStorageFutureBattery, eStorageNoBatteryFlag] = estBattery(energyStorage, auvFleet, simTime, dt, auvToDeploy, wec)
@@ -122,10 +116,10 @@ classdef EnergyStorage < handle
             auv_n_battery = zeros(1, numAUVs); 
             auvOpState =zeros(1, numAUVs); 
             auvOpTimeComplete = zeros(1, numAUVs); 
-            auvMission = zeros(1, numAUVs); 
-            auvMissionBattUsed = zeros(1, numAUVs); 
+            % auvMission = zeros(1, numAUVs); 
+            % auvMissionBattUsed = zeros(1, numAUVs); 
             auvMissionTime = zeros(1, numAUVs); 
-            auvMaxBatt = zeros(1, numAUVs);
+            % auvMaxBatt = zeros(1, numAUVs);
             auvChargeTime = zeros(1, numAUVs);
             eStorageNoBatteryFlag = 0; 
 
@@ -138,10 +132,10 @@ classdef EnergyStorage < handle
                 auv_n_battery(auvNum) = auv.n_battery; 
                 auvOpState(auvNum) = auv.opState(1);
                 auvOpTimeComplete(auvNum) = auv.opTimeComplete;
-                auvMission(auvNum) = auv.mission;
-                auvMissionBattUsed(auvNum) = auv.missionSpecs(auv.mission, 3) * auv.maxBattery;
+                % auvMission(auvNum) = auv.mission;
+                % auvMissionBattUsed(auvNum) = auv.missionSpecs(auv.mission, 3) * auv.batteryCapacity;
                 auvMissionTime(auvNum) = auv.missionSpecs(auv.mission, 2); 
-                auvMaxBatt(auvNum) = auv.maxBattery;
+                % auvMaxBatt(auvNum) = auv.batteryCapacity;
                 auvChargeTime(auvNum) = auv.chargeTime;
             end  
 
@@ -157,7 +151,7 @@ classdef EnergyStorage < handle
             
             % Calculate power generation overflow during mission + charge
             wecPwrGenFx = mean(wec.powerGenMeans(int32(simTime/dt) : int32(min(t_return/dt, length(wec.powerGenMeans))) ));
-            pwrOverflowRate = ( wecPwrGenFx - ( (wec.maxBattery - wec.battery)/(dt*wec.n_battery) + wec.hotelLoad/(wec.n_battery^2) ) ) * energyStorage.n_wecPwrTrnsfr * energyStorage.n_battery;
+            pwrOverflowRate = ( wecPwrGenFx - ( (wec.batteryCapacity - wec.battery)/(dt*wec.n_battery) + wec.hotelLoad/(wec.n_battery^2) ) ) * energyStorage.n_wecPwrTrnsfr * energyStorage.n_battery;
             totPwrOverflow = pwrOverflowRate * (t_return - simTime);
 
 
@@ -213,8 +207,8 @@ classdef EnergyStorage < handle
                     eStorageBattInit = energyStorage.battery;  % initialize battery level
                 end
 
-                % Power dumped = PowerGenOverflow - eStorageHotelLoad - eStorageMaxBattery + eStorageCurrentBattery - auvTotalDraw
-                powerDumps(j) = max(pwrOverflowRate.*timeIntervals(j) - energyStorage.hotelLoad.*timeIntervals(j)/energyStorage.n_battery/energyStorage.n_powerTrnsfr - energyStorage.maxBattery + eStorageBattInit - sum(chargingMatrix(:,j).*chargingDrawRate').*timeIntervals(j)/energyStorage.n_battery - sum(hotelMatrix(:,j).*hotelDrawRate')*timeIntervals(j)/energyStorage.n_battery, 0);
+                % Power dumped = PowerGenOverflow - eStorageHotelLoad - eStoragebatteryCapacity + eStorageCurrentBattery - auvTotalDraw
+                powerDumps(j) = max(pwrOverflowRate.*timeIntervals(j) - energyStorage.hotelLoad.*timeIntervals(j)/energyStorage.n_battery/energyStorage.n_powerTrnsfr - energyStorage.batteryCapacity + eStorageBattInit - sum(chargingMatrix(:,j).*chargingDrawRate').*timeIntervals(j)/energyStorage.n_battery - sum(hotelMatrix(:,j).*hotelDrawRate')*timeIntervals(j)/energyStorage.n_battery, 0);
 
                 % Calc new 'current' battery for start of next interval
                 eStorageBattInit = eStorageBattInit + pwrOverflowRate.*timeIntervals(j) - energyStorage.hotelLoad.*timeIntervals(j)/energyStorage.n_battery/energyStorage.n_powerTrnsfr - sum(chargingMatrix(:,j).*chargingDrawRate')*timeIntervals(j)/energyStorage.n_battery - sum(hotelMatrix(:,j).*hotelDrawRate')*timeIntervals(j)/energyStorage.n_battery - powerDumps(j);  % est. wec battery at beginning of next interval (prev batt + power gen - power draw - power dumped)

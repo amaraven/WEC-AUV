@@ -26,18 +26,18 @@ for i = 1:length(dataFiles)
 
     % Calculate stuff
     totalTimeOnMission = cellfun(@sum, modOut.auvTimeOnMissionCorrected);
-    domainTime = (modOut.simTime(end) - max(modOut.fleetNumber-1, 0) );
+    domainTime = (modOut.simTime(end) - max(modOut.fleetSize-1, 0) );
 
-    maxAggregateTime = zeros(size(modOut.fleetNumber));  % preallocate
-    for j = 1:length(modOut.fleetNumber)  % For each system in the simulation batch  
+    maxAggregateTime = zeros(size(modOut.fleetSize));  % preallocate
+    for j = 1:length(modOut.fleetSize)  % For each system in the simulation batch  
 
         if isempty(modOut.auvFleet{j})
             maxAggregateTime(j) = 1;
 
         else
-            t_m = modOut.auvFleet{1,j}{1,1}.missionSpecs(2); 
-            t_r = modOut.auvFleet{1,j}{1,1}.chargeTime;
-            t_auvDomain = modOut.simTime(end) - ((t_m+t_r)/modOut.fleetNumber(j))*[0:1:(modOut.fleetNumber(j)-1)];  % Time from initial deployment of AUV to the end of the simulation
+            t_m = modOut.auvFleet{1,j}(1).missionSpecs(2); 
+            t_r = modOut.auvFleet{1,j}(1).chargeTime;
+            t_auvDomain = modOut.simTime(end) - ((t_m+t_r)/modOut.fleetSize(j))*[0:1:(modOut.fleetSize(j)-1)];  % Time from initial deployment of AUV to the end of the simulation
 
             % For each auv, how many mission+recharge cycles can they complete from the time they are first deployed to the simulation-end
             numCycles = t_auvDomain./(t_m + t_r);
@@ -46,7 +46,7 @@ for i = 1:length(dataFiles)
             max_time_onMission_prelim(cases) = floor(numCycles(cases)).*t_m+ ( (numCycles(cases) - floor(numCycles(cases))) / (t_m/(t_m+t_r)) )*t_m;  % If remainder is < mission time
 
             % For each auv, track time spent on-mission before the start of the domain (once all AUVs have been deployed)
-            t_auvTimeSubtract = ((t_m+t_r)/modOut.fleetNumber(j)) * flip([0:1:(modOut.fleetNumber(j)-1)]);  % max_time_onMission_prelim included C*(N-1) extra hours for the first auv, C*(N-1)-1 extra hours for the second...etc with C = time between deployments, and N = fleet size
+            t_auvTimeSubtract = ((t_m+t_r)/modOut.fleetSize(j)) * flip([0:1:(modOut.fleetSize(j)-1)]);  % max_time_onMission_prelim included C*(N-1) extra hours for the first auv, C*(N-1)-1 extra hours for the second...etc with C = time between deployments, and N = fleet size
             t_auvTimeSubtract(t_auvTimeSubtract >= t_m) = t_m; 
 
             % Final maximum time AUVs could spend on-mission
@@ -81,7 +81,7 @@ end
 % Figure - select AUVs
 figure; hold on;
 for k = [3,4,9,13,21]%[3,4,9,12,13]%1:21 % [3,4,6,9,12,13]
-% scatter(modOut.ratePwrUsed.*modOut.fleetNumber./modOut.meanPowerGen, 100*totalTimeOnMission./(maxAggregateTime), [], wec.charDim*ones(size(modOut.ratePwrUsed)));
+% scatter(modOut.ratePwrUsed.*modOut.fleetSize./modOut.meanPowerGen, 100*totalTimeOnMission./(maxAggregateTime), [], wec.charDim*ones(size(modOut.ratePwrUsed)));
     % plot(normalizedPowerUse(:,k), deploymentEfficiency(:,k), 'k-','LineWidth', 0.5); ylabel('Deployment Efficiency Percentage')
     % scatter(normalizedPowerUse(:,k), deploymentEfficiency(:,k), [], charDim, 'LineWidth',1.5); ylabel('Deployment Efficiency Percentage')
     plot(normalizedPowerUse(:,k), normalizedOnMissionTime(:,k), 'k-','LineWidth', 0.5); 
@@ -134,10 +134,10 @@ for i = 1:length(dataFiles)
 
     % Calculate stuff
     totalTimeOnMission = cellfun(@sum, modOut.auvTimeOnMissionCorrected);
-    domainTime = (modOut.simTime(end) - max(modOut.fleetNumber-1, 0) );
+    domainTime = (modOut.simTime(end) - max(modOut.fleetSize-1, 0) );
 
-    maxAggregateTime = zeros(size(modOut.fleetNumber));  % preallocate
-    for j = 1:length(modOut.fleetNumber)  % For each system in the simulation batch  
+    maxAggregateTime = zeros(size(modOut.fleetSize));  % preallocate
+    for j = 1:length(modOut.fleetSize)  % For each system in the simulation batch  
 
         if isempty(modOut.auvFleet{j})
             maxAggregateTime(j) = 1;
@@ -145,7 +145,7 @@ for i = 1:length(dataFiles)
         else
             t_m = modOut.auvFleet{1,j}{1,1}.missionSpecs(2); 
             t_r = modOut.auvFleet{1,j}{1,1}.chargeTime;
-            t_auvDomain = modOut.simTime(end) - ((t_m+t_r)/modOut.fleetNumber(j))*[0:1:(modOut.fleetNumber(j)-1)];  % Time from initial deployment of AUV to the end of the simulation
+            t_auvDomain = modOut.simTime(end) - ((t_m+t_r)/modOut.fleetSize(j))*[0:1:(modOut.fleetSize(j)-1)];  % Time from initial deployment of AUV to the end of the simulation
 
             % For each auv, how many mission+recharge cycles can they complete from the time they are first deployed to the simulation-end
             numCycles = t_auvDomain./(t_m + t_r);
@@ -154,7 +154,7 @@ for i = 1:length(dataFiles)
             max_time_onMission_prelim(cases) = floor(numCycles(cases)).*t_m+ ( (numCycles(cases) - floor(numCycles(cases))) / (t_m/(t_m+t_r)) )*t_m;  % If remainder is < mission time
 
             % For each auv, track time spent on-mission before the start of the domain (once all AUVs have been deployed)
-            t_auvTimeSubtract = ((t_m+t_r)/modOut.fleetNumber(j)) * flip([0:1:(modOut.fleetNumber(j)-1)]);  % max_time_onMission_prelim included C*(N-1) extra hours for the first auv, C*(N-1)-1 extra hours for the second...etc with C = time between deployments, and N = fleet size
+            t_auvTimeSubtract = ((t_m+t_r)/modOut.fleetSize(j)) * flip([0:1:(modOut.fleetSize(j)-1)]);  % max_time_onMission_prelim included C*(N-1) extra hours for the first auv, C*(N-1)-1 extra hours for the second...etc with C = time between deployments, and N = fleet size
             t_auvTimeSubtract(t_auvTimeSubtract >= t_m) = t_m; 
 
             % Final maximum time AUVs could spend on-mission
@@ -165,7 +165,7 @@ for i = 1:length(dataFiles)
     end
                   
     scatter(modOut.ratePwrUsed./modOut.meanPowerGen, 100*totalTimeOnMission./(maxAggregateTime), [], wec.charDim*ones(size(modOut.ratePwrUsed))); ylabel('Deployment Efficiency Percentage')
-    % scatter(modOut.ratePwrUsed.*modOut.fleetNumber./modOut.meanPowerGen, 100*totalTimeOnMission./(domainTime), [], wec.charDim*ones(size(modOut.ratePwrUsed))); ylabel('Normalized \% On'); 
+    % scatter(modOut.ratePwrUsed.*modOut.fleetSize./modOut.meanPowerGen, 100*totalTimeOnMission./(domainTime), [], wec.charDim*ones(size(modOut.ratePwrUsed))); ylabel('Normalized \% On'); 
     grid on; xlabel('AUV Power Use Normalized to Mean Power Gen.','Interpreter','latex'); ylabel('Normalized \% On','Interpreter','latex'); 
     title('Varying AUV Model');
     colorbar; map = [61 32 44; 120 63 87; 35 87 137; 80 145 145; 91 140 90; 162 154 58; 252 171 16; 219 110 48; 202 80 64; 185 49 79]; colormap(map/255)
@@ -207,11 +207,11 @@ for i = 1:length(dataFiles)
     % Calculate stuff
     if modOut.incorpStagger == 1
         totalTimeOnMission = cellfun(@sum, modOut.auvTimeOnMissionCorrected);
-        for k = 1:length(modOut.fleetNumber)
-            staggerHours(k) = (modOut.auvFleet{1,k}{1,1}.missionSpecs(2) + modOut.auvFleet{1,k}{1,1}.chargeTime) / modOut.fleetNumber(k);
+        for k = 1:length(modOut.fleetSize)
+            staggerHours(k) = (modOut.auvFleet{1,k}{1,1}.missionSpecs(2) + modOut.auvFleet{1,k}{1,1}.chargeTime) / modOut.fleetSize(k);
         end
 
-        domainTime = modOut.simTime(end)-staggerHours.*(modOut.fleetNumber-1);
+        domainTime = modOut.simTime(end)-staggerHours.*(modOut.fleetSize-1);
 
 
     else  % no stagger incorporated...
@@ -219,11 +219,11 @@ for i = 1:length(dataFiles)
         domainTime = modOut.simTime;
     end
 
-    maxAggregateTime = zeros(size(modOut.fleetNumber));
-    for j = 1:length(modOut.fleetNumber)  % For each system in the simulation batch  
+    maxAggregateTime = zeros(size(modOut.fleetSize));
+    for j = 1:length(modOut.fleetSize)  % For each system in the simulation batch  
         t_m = modOut.auvFleet{1,j}{1,1}.missionSpecs(2); 
         t_r = modOut.auvFleet{1,j}{1,1}.chargeTime;
-        t_auvDomain = modOut.simTime(end) - ((t_m+t_r)/modOut.fleetNumber(j))*[0:1:(modOut.fleetNumber(j)-1)];  % Time from initial deployment of AUV to the end of the simulation
+        t_auvDomain = modOut.simTime(end) - ((t_m+t_r)/modOut.fleetSize(j))*[0:1:(modOut.fleetSize(j)-1)];  % Time from initial deployment of AUV to the end of the simulation
 
         % For each auv, how many mission+recharge cycles can they complete from the time they are first deployed to the simulation-end
         numCycles = t_auvDomain./(t_m + t_r);
@@ -232,7 +232,7 @@ for i = 1:length(dataFiles)
         max_time_onMission_prelim(cases) = floor(numCycles(cases)).*t_m+ ( (numCycles(cases) - floor(numCycles(cases))) / (t_m/(t_m+t_r)) )*t_m;  % If remainder is < mission time
 
         % For each auv, track time spent on-mission before the start of the domain (once all AUVs have been deployed)
-        t_auvTimeSubtract = ((t_m+t_r)/modOut.fleetNumber(j)) * flip([0:1:(modOut.fleetNumber(j)-1)]);  % max_time_onMission_prelim included C*(N-1) extra hours for the first auv, C*(N-1)-1 extra hours for the second...etc with C = time between deployments, and N = fleet size
+        t_auvTimeSubtract = ((t_m+t_r)/modOut.fleetSize(j)) * flip([0:1:(modOut.fleetSize(j)-1)]);  % max_time_onMission_prelim included C*(N-1) extra hours for the first auv, C*(N-1)-1 extra hours for the second...etc with C = time between deployments, and N = fleet size
         t_auvTimeSubtract(t_auvTimeSubtract >= t_m) = t_m; 
 
         % Final maximum time AUVs could spend on-mission
@@ -255,12 +255,12 @@ for i = 1:length(dataFiles)
 
     % Plot performance given fleet number
     yyaxis left
-    % scatter(modOut.fleetNumber(auvNum),  100*totalTimeOnMission(auvNum)./maxAggregateTime(auvNum));  ylabel('Deployment Efficiency Percentage'); % 'deployment efficiency'
-    scatter(modOut.fleetNumber(auvNum),  100*totalTimeOnMission(auvNum)./(domainTime(auvNum).*modOut.fleetNumber(auvNum)));  ylabel('Normalized Working Hours Percentage') 
+    % scatter(modOut.fleetSize(auvNum),  100*totalTimeOnMission(auvNum)./maxAggregateTime(auvNum));  ylabel('Deployment Efficiency Percentage'); % 'deployment efficiency'
+    scatter(modOut.fleetSize(auvNum),  100*totalTimeOnMission(auvNum)./(domainTime(auvNum).*modOut.fleetSize(auvNum)));  ylabel('Normalized Working Hours Percentage') 
 
     % Plot performance given fleet number
     yyaxis right 
-    scatter(modOut.fleetNumber(auvNum),  100*totalTimeOnMission(auvNum)./domainTime(auvNum));%./modOut.fleetNumber(auvNum)); 
+    scatter(modOut.fleetSize(auvNum),  100*totalTimeOnMission(auvNum)./domainTime(auvNum));%./modOut.fleetSize(auvNum)); 
 
 end
 end
@@ -276,14 +276,14 @@ end
 %     end
 % end
 % 
-% for i = 1:length(modOut.fleetNumber)
+% for i = 1:length(modOut.fleetSize)
 %     t_m(i) = modOut.auvFleet{1,i}{1,1}.missionSpecs(2);  % t_m = mission time
 %     t_r(i) = modOut.auvFleet{1,i}{1,1}.chargeTime;  % t_r = recharge time
 % end
 % num_cycles = modOut.simTime(end)./(t_m + t_r);  % # mission+recharge cycles fit in a simulation
 % 
-% max_time_onMission = zeros(size(modOut.fleetNumber));  % preallocate
-% for j = 1:length(modOut.fleetNumber)
+% max_time_onMission = zeros(size(modOut.fleetSize));  % preallocate
+% for j = 1:length(modOut.fleetSize)
 %     if (num_cycles(j) - floor(num_cycles(j))) >= (t_m(j)/(t_r(j)+t_m(j)))
 %         max_time_onMission(j) = floor(num_cycles(j))*t_m(j) + t_m(j);
 % 
@@ -300,9 +300,9 @@ end
 
 
 
-% for i = 1:length(modOut.fleetNumber)
-%     staggerHours(i) = modOut.auvFleet{1,i}{1,1}.missionSpecs(2)+modOut.auvFleet{1,i}{1,1}.chargeTime/modOut.fleetNumber(i);
-%     int = 1:1:modOut.fleetNumber(i);
+% for i = 1:length(modOut.fleetSize)
+%     staggerHours(i) = modOut.auvFleet{1,i}{1,1}.missionSpecs(2)+modOut.auvFleet{1,i}{1,1}.chargeTime/modOut.fleetSize(i);
+%     int = 1:1:modOut.fleetSize(i);
 %     fnSum(i) = sum(int(1:end-1))*staggerHours(i); 
 % 
 % end
@@ -337,7 +337,7 @@ end
 % 
 %     scatter(modOut.ratePwrUsed./(modOut.meanPowerGen), 100*totalTimeOnMission/modOut.simTime(end));
 %     % scatter(modOut.ratePwrUsed./(modOut.meanPowerGen-wec.hotelLoad), 100*totalTimeOnMission/modOut.simTime(end));
-%     % scatter(modOut.ratePwrUsed./modOut.meanPowerGen, modOut.fleetNumber);
+%     % scatter(modOut.ratePwrUsed./modOut.meanPowerGen, modOut.fleetSize);
 % 
 % 
 % end
@@ -349,7 +349,7 @@ end
 % out some other variables that may be at play. 
 %{
 
-%     waveFleetNumber = floor((powerGen40p * wec.n_battery - wec.hotelLoad/wec.n_battery) / (auv.hotelLoad / wec.n_battery / auv.n_battery / auv.n_powerTransfer));  % PowerGen - wecHotelLoad - auvHotelLoad*fleetNumber > 0
+%     wavefleetSize = floor((powerGen40p * wec.n_battery - wec.hotelLoad/wec.n_battery) / (auv.hotelLoad / wec.n_battery / auv.n_battery / auv.n_powerTransfer));  % PowerGen - wecHotelLoad - auvHotelLoad*fleetSize > 0
 %     cycleTime = auv.chargeTime(auv.mission) + auv.missionSpecs(auv.mission,2);
 %     possibleFleet = floor((meanPowerGen*wec.n_battery - wec.hotelLoad/wec.n_battery)*cycleTime / (auv.chargeLoad/wec.n_battery) + 0.5);
 
@@ -361,7 +361,7 @@ auvModel =[{'Iver3-27'}, {'Iver3-38.5'}, {'REMUS 100'}, {'REMUS 300-58.5'}, {'RE
 seaState = 3; 
 wec.calcPowerGen(RM3, seaState, simHrs, dt);  % Output is wec.powerGenMeans: Timeseries of power generation [W] corresponding to simulation time.
 meanPowerGen = mean(wec.powerGenMeans);
-powerGen40p = prctile(wec.powerGenMeans, 40);  % Using 40th percentile for fleetNumber calculation because 'mean' often yields a slight overestimation for the number of AUV's. 40th %ile adds a safety factor.
+powerGen40p = prctile(wec.powerGenMeans, 40);  % Using 40th percentile for fleetSize calculation because 'mean' often yields a slight overestimation for the number of AUV's. 40th %ile adds a safety factor.
 lowPowerGen = prctile(wec.powerGenMeans, 25);  % p ends up being less than 0.1%...
 
 chargeRateOvrMeanPwr(:,1) = 1:length(auvModel);
@@ -375,14 +375,14 @@ for iter = 1:length(auvModel)
     t_wecRecharge = max((auv.chargeLoad(auv.mission)/wec.n_battery - (meanPowerGen*wec.n_battery - wec.hotelLoad/wec.n_battery)*auv.chargeTime(auv.mission) ) / (wec.n_battery*meanPowerGen - wec.hotelLoad/wec.n_battery), 0);  % If negative, generated more power than used during auv recharge, power dumped instead, and wec recovery time is 0
     
     % Fleet num based on number of times WEC can recharge (after a full AUV charge), within a single AUV mission  
-    % fleetNumber = max(ceil(auv.missionSpecs(auv.mission,2) / (auv.chargeLoad/(wec.n_battery*meanPowerGen)))+1, 1); 
+    % fleetSize = max(ceil(auv.missionSpecs(auv.mission,2) / (auv.chargeLoad/(wec.n_battery*meanPowerGen)))+1, 1); 
 
     % fleet num based on total power available
     cycleTime = auv.chargeTime(auv.mission) + auv.missionSpecs(auv.mission,2);  % Time for an auv to go on mission + recharge
     pwrAvailableFleet(iter,2) = (meanPowerGen*wec.n_battery - wec.hotelLoad/wec.n_battery)*cycleTime / (auv.chargeLoad/wec.n_battery) + 0.5;  % number of auv's that can recharge given the power available + a little, to account for docked auvs
 
     % Calculate MAX number of AUV's WEC could support in dock with given/calculated power generation
-    maxHotelFleet(iter, 2) = (meanPowerGen * wec.n_battery - wec.hotelLoad/wec.n_battery) / (auv.hotelLoad / wec.n_battery / auv.n_battery / auv.n_powerTransfer);  % PowerGen - wecHotelLoad - auvHotelLoad*fleetNumber > 0    
+    maxHotelFleet(iter, 2) = (meanPowerGen * wec.n_battery - wec.hotelLoad/wec.n_battery) / (auv.hotelLoad / wec.n_battery / auv.n_battery / auv.n_powerTransfer);  % PowerGen - wecHotelLoad - auvHotelLoad*fleetSize > 0    
 
     % Ratio between charge rate & mean power gen
     chargeRateOvrMeanPwr(iter,2) = auv.chargeRate / meanPowerGen;
@@ -402,7 +402,7 @@ chargeLoadOvrMeanPwr(:,4) = 2*(chargeLoadOvrMeanPwr(:,2) > 30);%.*chargeLoadOvrM
 %}
 
 % if t_wecRecharge > auv.missionSpecs(auv.mission, 2)  % If an auv mission is shorter than the time it takes the WEC to recharge after an AUV-recharge...
-%         fleetNumber(depVar) = 1;
+%         fleetSize(depVar) = 1;
 %     else
 % 
 %         numWECrecharge = ceil(auv.missionSpecs(auv.mission,2) / t_wecRecharge);
@@ -410,14 +410,14 @@ chargeLoadOvrMeanPwr(:,4) = 2*(chargeLoadOvrMeanPwr(:,2) > 30);%.*chargeLoadOvrM
 %         possibleFleet = floor((meanPowerGen*wec.n_battery - wec.hotelLoad/wec.n_battery)*cycleTime / (auv.chargeLoad/wec.n_battery) + 0.5);
 % 
 %        if possibleFleet <= maxHotelFleet  % If the number of times the wec can recharge within a single auv mission is less than the fleet number calculated from the wave resource..
-%             % t_wecRechargeUpdated = auv.chargeLoad(auv.mission)/((wec.n_battery*meanPowerGen - wec.hotelLoad/wec.n_battery - auv.hotelLoad*(numWECrecharge/2)/wec.n_battery/auv.n_powerTransfer));  % hotelLoad*(fleetNumber(depVar)-1)
-%             % fleetNumber(depVar) = ceil(auv.missionSpecs(auv.mission,2) / t_wecRechargeUpdated);
+%             % t_wecRechargeUpdated = auv.chargeLoad(auv.mission)/((wec.n_battery*meanPowerGen - wec.hotelLoad/wec.n_battery - auv.hotelLoad*(numWECrecharge/2)/wec.n_battery/auv.n_powerTransfer));  % hotelLoad*(fleetSize(depVar)-1)
+%             % fleetSize(depVar) = ceil(auv.missionSpecs(auv.mission,2) / t_wecRechargeUpdated);
 %             % disp('Lim. by wec recharge.')
-%             fleetNumber(depVar) = possibleFleet;
+%             fleetSize(depVar) = possibleFleet;
 %             disp('Lim. by possibleFleet')
 %        else
-%            fleetNumber(depVar) = maxHotelFleet;
-%         % fleetNumber(depVar) = min( fleetNumber(depVar), ceil(auv.missionSpecs(auv.mission,2) / t_wecRecharge) ); %(auv.chargeLoad/(wec.n_battery*meanPowerGen))) );
+%            fleetSize(depVar) = maxHotelFleet;
+%         % fleetSize(depVar) = min( fleetSize(depVar), ceil(auv.missionSpecs(auv.mission,2) / t_wecRecharge) ); %(auv.chargeLoad/(wec.n_battery*meanPowerGen))) );
 %        end
 % 
 %     end

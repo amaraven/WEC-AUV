@@ -13,27 +13,35 @@ classdef AUV < handle
     % 
     % Currently supported models 'A' - 'U' are generic examples
 
-    properties
+    properties (GetAccess = public, SetAccess = public)  %%%%%%%%%%% change set access to private when model is working...
+        % Constants
         model           % Model of auv (i.e. 'Iver3')
         mass            % [kg] Mass of auv 
         mission         % Mission number currently using / running
         missionSpecs    % Column-vector matrix containing mission number (1,2..), time to complete [hr], and percentage of battery used (0.XX)
-        maxBattery      % [Wh] Total energy storage onboard 
+        batteryCapacity % [Wh] Total energy storage onboard 
         chargeRate      % [W] Rate of battery charge 
-        chargeTime      % [hr] Column-vector of time to go to 100% charge after respective mission. NOTE: Mission must use >= 20% of battery for this calc to be accurate. 
-        chargeMethod    % Wired (1) or Wireless (2) charging
-        chargeLoad      % [Wh] Column-vector of total load put on WEC to charge auv after a given mission, assuming AUV started with a full battery
+        chargeMethod    % Wired (1) or Wireless (0) charging
         hotelLoad       % [W] Baseline power usage of AUV
-        n_powerTransfer % [0.XX] Power transfer efficiency 
-        n_battery       % [0.XX] Battery efficiency (losses during charge & discharge)
+        rechargeThreshold   % [0.XX] Percentage of battery to recharge at. Default is 20%
+        n_powerTransfer     % [0.XX] Power transfer efficiency 
+        n_battery           % [0.XX] Battery efficiency (losses during charge & discharge)
+
+        % Variables
+        
+        % Dependent Constants
+        chargeTime      % [hr] Column-vector of time to go to 100% charge after respective mission. NOTE: Mission must use >= 20% of battery for this calc to be accurate. 
+        chargeLoad      % [Wh] Column-vector of total load put on WEC to charge auv after a given mission, assuming AUV started with a full battery
+    end
+
+    % Variables
+    properties (Access = public)
         opState         % Vector containing current operational state and simulation timestamp of respective state change in hours ([opState, t]) with 1) Executing AUV mission, 2) AUV recharging, 3) AUV docked & fully charged
         opTimeComplete  % [hr] Time current opState will be complete
         battery         % Vector containing battery level at the end of the last operational state (battery(1)) and the current battery level (battery(2)) [Wh] ([B(i-1); B(i)]). battery(1) corresponds to timestamp saved as opState(2)
         batteryTime     % [hr] Time corresponding to the current battery level (battery(2)) - NOTE: Not currently used externally as of 8/14/25    
         wecBatteryDraw  % [W] Energy draw level (0 if not charging) associated with current battery and batteryTime
-        rechargeThreshold % [0.XX] Percentage of battery to recharge at. Default is 20%
-
-    end
+    end 
 
 
     %% Instance Methods (need object as an input)
@@ -41,315 +49,59 @@ classdef AUV < handle
 
         %% Constructor: Creates & returns an object
         % function auv = AUV(model, mass, missionSpecs, maxBattery, chargeRate, chargeMethod, hotelLoad, rechargeThreshold, n_battery, n_powerTransfer)
-        function auv = AUV(varargin)
-            % AUV object constructor with name-value pairs for custom
-            % user input hardware specifications
-            %
-            % Optional Name-Value Pair Inputs: 
-            % - model: String label for AUV model. Pre-set AUV defaults
-            %    esist for model names 'A' through 'U'
-            % - mass: [kg] Numeric value for AUV mass
-            % - missionSpecs: 1x3 numeric array containing the mission
-            %    number (must be 1), time to complete mission [hr], and
-            %    fraction of battery used for mission (0.XX)
-            % - maxBattery: [Wh] Numeric value for the AUV's total battery
-            %    capacity
-            % - chargeRate: [W] Rate of AUV battery recharge
-            % - chargeMethod: 1 - wired recharge connection OR 2 - wireless
-            %    recharge
-            % - hotelLoad: [W] Numeric value for the AUV's baseline power
-            %    usage
-            % - rechargeThreshold: Fraction of AUV battery that triggers
-            %    recharge (0.XX)
-            % - n_battery: Battery efficiency (0.XX)
-            % - n_powerTransfer: Power transfer efficiency (0.XX)
-
-            % Set up inputParser
-            p = inputParser;
-            p.FunctionName = 'AUV';
-
-            % name-value pair inputs w/ empty defaults
-            addParameter(p, 'model', [], @(x) ischar(x) || issstring(x));
-            addParameter(p, 'mass', [], @isnumeric);
-            addParameter(p, 'missionSpecs', [], @isnumeric);
-            addParameter(p, 'maxBattery', [], @isnumeric);
-            addParameter(p, 'chargeRate', [], @isnumeric);
-            addParameter(p, 'chargeMethod', [], @(x) isnumeric(x) && ismember(x, [1,2]));
-            addParameter(p, 'hotelLoad', [], @isnumeric);
-            addParameter(p, 'rechargeThreshold', [], @isnumeric);
-            addParameter(p, 'n_battery', [], @isnumeric);
-            addParameter(p, 'n_powerTransfer', [], @isnumeric);
-
-            % parse inputs
-            parse(p, varargin{:});
-            inputStruct = p.Results;
-
-            % Assign model name
-            if isempty(inputStruct.model)
-                warning('No model name provided, using "Default AUV" for this simulation')
-                auv.model = 'Default AUV';
-            else
-                auv.model = inputStruct.model;
+        function auv = AUV(model, mass, batteryCapacity, missionTime, missionBatteryUsed, hotelLoad, chargeRate, chargeMethod, batteryRechargeThreshold, n_battery, n_powerTransfer)
+            % AUV object constructor generates an object with the given
+            % properties. Default values are used if no inputs are given.
+            arguments
+            model (1,1) string = "Default AUV"  % String containing model name
+            mass (1,1) {mustBeNumeric, mustBePositive} = 100  % [kg] Mass of AUV
+            batteryCapacity (1,1) {mustBeNumeric, mustBePositive} = 1000  % [Wh] Total energy storage on board
+            missionTime (1,1) {mustBeNumeric, mustBePositive} = 10  % [hr] Time to complete a mission
+            missionBatteryUsed (1,1) {mustBeNumeric, mustBeInRange(missionBatteryUsed, 0, 1, 'exclude-lower')} = 0.8  % [0.XX] percent of battery used during mission
+            hotelLoad (1,1) {mustBeNumeric, mustBeNonnegative} = 90  % [W] Baseline power usage of AUV
+            chargeRate (1,1) {mustBeNumeric, mustBePositive} = 160  % [Wh] Rate of battery charge
+            chargeMethod (1,1) {mustBeNumeric, mustBeMember(chargeMethod, [1,0])} = 1  % Wired (1) or Wireless (0) charging
+            batteryRechargeThreshold (1,1) {mustBeNumeric, mustBePositive} = 0.20  % [0.XX] Percentage of battery to initiate recharge
+            n_battery (1,1) {mustBeNumeric,  mustBeInRange(n_battery, 0, 1, 'exclude-lower')} = 0.90  % [0.XX] Battery efficiency
+            n_powerTransfer (1,1) {mustBeNumeric,  mustBeInRange(n_powerTransfer, 0, 1, 'exclude-lower')} = 0.90  % [0.XX] Power transfer efficiency
             end
 
-            args = {'mass', 'missionSpecs', 'maxBattery', 'chargeRate', 'chargeMethod', 'hotelLoad', 'rechargeThreshold', 'n_battery', 'n_powerTransfer'};
-            argDefaults = {100, [1, 10, 0.8], 1000, 200, 1, [], 0.20, 0.9, []};
-
-
-            % Assign values for pre-set models
-            switch auv.model 
-                case 'A'  % Source: Driscol '19
-                    auv.mass = 27;  % Iver3 model options range from 27-38.5 kg
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 8*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];  % Iver3 model options range from 8-14 hrs until recharge needed
-                    auv.maxBattery = 800; 
-                    auv.chargeRate = 160;
-                    auv.chargeMethod = 1;  
-                    auv.hotelLoad = 90;  
-
-                case 'B'  % Source: Driscol '19
-                    auv.mass = 38.5;  % range from 27-38.5 kg
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 14*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];  % range from 8-14 hrs
-                    auv.maxBattery = 800; 
-                    auv.chargeRate = 160;
-                    auv.chargeMethod = 1;
-                    auv.hotelLoad = 90;  
-
-                case 'C'  % *all UUVs* Website source: https://hii.com/what-we-do/capabilities/unmanned-systems/remus-uuvs/
-                    auv.mass = 38.6;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 10*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 1500; 
-                    auv.chargeRate = auv.maxBattery / 6; 
-                    auv.chargeMethod = 1;
-                    auv.hotelLoad = 90;  
-
-                case 'D'  % 4
-                    auv.mass = 58.5;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 20*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 3000; 
-                    auv.chargeRate = auv.maxBattery / 6;
-                    auv.chargeMethod = 1;
-
-                case 'E'  % 5
-                    auv.mass = 70.3;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 30*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 4500; 
-                    auv.chargeRate = auv.maxBattery / 6;
-                    auv.chargeMethod = 1;
-
-                case 'F'  % 6
-                    auv.mass = 210;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 42*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 9600; 
-                    auv.chargeRate = auv.maxBattery / 8;
-                    auv.chargeMethod = 1;
-
-                case 'G'  % 7
-                    auv.mass = 279;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 80*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 19300; 
-                    auv.chargeRate = auv.maxBattery / 10;
-                    auv.chargeMethod = 1;
-
-                case 'H'
-                    auv.mass = 347;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 110*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 28900; 
-                    auv.chargeRate = auv.maxBattery / 12;
-                    auv.chargeMethod = 1;
-
-                case 'I'  %9
-                    auv.mass = 1630;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 25*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 17550; 
-                    auv.chargeRate = auv.maxBattery / 24;
-                    auv.chargeMethod = 1;
-
-                case 'J'
-                    auv.mass = 70;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 8*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 1900;
-                    auv.chargeRate = auv.maxBattery / 6;
-                    auv.chargeMethod = 1;
-
-                case 'K'
-                    auv.mass = 250;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 36*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 7600;
-                    auv.chargeRate = auv.maxBattery / 6;
-                    auv.chargeMethod = 1;
-
-                case 'L'  % 12
-                    auv.mass = 750;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 25*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 13500;
-                    auv.chargeRate = auv.maxBattery / 6;
-                    auv.chargeMethod = 1;  
-
-                case 'M'
-                    auv.mass = 72.6;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 3.5*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 1500;
-                    auv.chargeRate = auv.maxBattery / 6;
-                    auv.chargeMethod = 1;
-
-                case 'N'  % 14
-                    auv.mass = 2200;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 72*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 62500;
-                    auv.chargeRate = auv.maxBattery / 8;
-                    auv.chargeMethod = 1;
-
-                case 'O'
-                    auv.mass = 8000;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 360*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 400000;
-                    auv.chargeRate = auv.maxBattery / 8;
-                    auv.chargeMethod = 1;
-
-                case 'P'  % 16
-                    auv.mass = 1000;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 24*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 24000;
-                    auv.chargeRate = auv.maxBattery / 8;
-                    auv.chargeMethod = 1;
-
-                case 'Q'
-                    auv.mass = 1550;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 74*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 48000;
-                    auv.chargeRate = auv.maxBattery / 8;
-                    auv.chargeMethod = 1;
-
-                case 'R'  % 18
-                    auv.mass = 25;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 10*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 600;
-                    auv.chargeRate = auv.maxBattery / 5;
-                    auv.chargeMethod = 1;
-                    auv.hotelLoad = 1;  % [W] from email correspondance with boxfish
-
-                case 'S'
-                    auv.mass = 28;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 10*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 600;
-                    auv.chargeRate = auv.maxBattery / 4;
-                    auv.chargeMethod = 2;
-
-                case 'T'  %20
-                    auv.mass = 650;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 10.8*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 12000; 
-                    auv.chargeRate = auv.maxBattery / 3.64;
-                    auv.chargeMethod = 1;
-
-                case 'U'
-                    auv.mass = 1300;
-                    auv.rechargeThreshold = 0.20;
-                    auv.missionSpecs = [1, 21.6*(1-auv.rechargeThreshold), (1-auv.rechargeThreshold)];
-                    auv.maxBattery = 30000; 
-                    auv.chargeRate = auv.maxBattery / 9.09;
-                    auv.chargeMethod = 1;
-
-                % For custom model
-                otherwise
-                    % Assign all properties from input arguments
-                    if ~isempty(inputStruct.model)        
-                        auv.model = inputStruct.model;
-                    end
-                    auv.mass = inputStruct.mass;
-                    auv.missionSpecs = inputStruct.missionSpecs; 
-                    auv.maxBattery = inputStruct.maxBattery;
-                    auv.chargeRate = inputStruct.chargeRate;
-                    auv.chargeMethod = inputStruct.chargeMethod;
-                    auv.hotelLoad = inputStruct.hotelLoad;
-                    auv.rechargeThreshold = inputStruct.rechargeThreshold;
-                    auv.n_battery = inputStruct.n_battery;
-                    auv.n_powerTransfer = inputStruct.n_powerTransfer;
-
-                    % Assign defaults to empty inputs
-                    for i = 1:numel(args)
-                        val = inputStruct.(args{i});
-                        if isempty(val)
-                            auv.(args{i}) = argDefaults{i};
-                        end
-                    end
-            end
+            auv.model = model;
+            auv.mass = mass; 
+            auv.batteryCapacity = batteryCapacity;
+            auv.missionSpecs = [1, missionTime, missionBatteryUsed]; 
+            auv.hotelLoad = hotelLoad; 
+            auv.chargeRate = chargeRate;
+            auv.chargeMethod = chargeMethod;
+            auv.rechargeThreshold = batteryRechargeThreshold;
+            auv.n_battery = n_battery;
+            auv.n_powerTransfer = n_powerTransfer;
 
             auv.mission = 1;  % Current auv's only have one mission option, so always will be running 'mission 1
 
-
-            % Override assigned defaults w/ user-input arguments
-            for i = 1:numel(args)
-                val = inputStruct.(args{i});
-                if ~isempty(val)
-                    auv.(args{i}) = val;
-                end
-            end
-            
-
-            % Hotel Load (extrapolate from Boxfish AUV)
-            interpHotelLoad = 1;
-            if isempty(auv.hotelLoad)
-                if interpHotelLoad == 1 
-                    auv.hotelLoad = round(auv.mass / 25);  % Interpolates based on auv mass relative to hotel load of Boxfish AUV                
-                else
-                    auv.hotelLoad = 90;  % [W] Generic, used in 'Wave-Powered AUV Recharging: A Feasibility Study' by B. P. Driscol, A. Gish, and R. G. Coe in 2019
-                end
-            end
-            
-
-            % Efficiencies
-            if isempty(auv.n_battery)
-                auv.n_battery = 0.90;  % from 'A unified simulation framework for wave energy powered underwater vehicle docking and charging' by M. Chen Et. Al. in 2024
-            end
-
-            if isempty(auv.n_powerTransfer)
-                if auv.chargeMethod == 1
-                    auv.n_powerTransfer = 0.9;  % https://www.researchgate.net/publication/264124522_Efficiency_Comparison_of_Wire_and_Wireless_Battery_Charging_Based_on_Connection_Probability_Analysis
-                elseif auv.chargeMethod == 2
-                    auv.n_powerTransfer = 0.50;  % Baseline efficiency for wireless power transfer from 'Adaptive Wireless Power for Subsea Vehicles' by D. Manalang Et. Al. in 2022
-                else
-                    error('Unsupported charge method. Please specify 1 for wired charging or 2 for wireless charging.');
-                end
-            end
-
-
-            % Calculate chargeTime (from rechargeThreshold to 100%)
+            % Dependent Constants
             rateLinPowerTransfer = auv.chargeRate;  % Rate of power transfer in linear region
-            auv.chargeTime = ( 0.8-(1-auv.missionSpecs(:,3)) )*auv.maxBattery/rateLinPowerTransfer  + 0.4*auv.maxBattery./rateLinPowerTransfer;  % Time to charge up to 80% + time to charge from 80% to 100% 
+            auv.chargeTime = ( 0.8-(1-auv.missionSpecs(:,3)) )*auv.batteryCapacity/rateLinPowerTransfer  + 0.4*auv.batteryCapacity./rateLinPowerTransfer;  % Time to charge up to 80% + time to charge from 80% to 100% 
+            auv.chargeLoad = (auv.batteryCapacity*auv.missionSpecs(:, 3) + auv.hotelLoad*auv.chargeTime) / auv.n_powerTransfer / auv.n_battery;  % Load on WEC battery to charge AUV battery
 
-            % calculate load on WEC battery to charge AUV battery [Wh]
-            auv.chargeLoad = (auv.maxBattery*auv.missionSpecs(:, 3) + auv.hotelLoad*auv.chargeTime) / auv.n_powerTransfer / auv.n_battery;  
-
-            % Initialize battery levels
+            % Initialize battery levels & operational state
             auv.opState = [3, 0];  % AUV initialized to be docked with a full battery at time t = 0
-            auv.battery = [auv.maxBattery; auv.maxBattery];  % Current & previous battery states initialized as full
+            auv.battery = [auv.batteryCapacity; auv.batteryCapacity];  % Current & previous battery states initialized as full
             auv.wecBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;  % Drawing enough from WEC to stay at full charge
-
-            % Initialize opTimeComplete
             auv.opTimeComplete = NaN; 
 
         end  % constructor function
+
+
+        %% Re-Initialize auv Object
+        function reset(auv)
+            % Re-initializes auv variable properties
+            auv.opState = [3, 0];  % AUV initialized to be docked with a full battery at time t = 0
+            auv.battery = [auv.batteryCapacity; auv.batteryCapacity];  % Current & previous battery states initialized as full
+            auv.wecBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;  % Drawing enough from WEC to stay at full charge
+            auv.opTimeComplete = NaN; 
+            auv.batteryTime = [];
+        end
 
 
         %% Battery Tracker
@@ -376,7 +128,7 @@ classdef AUV < handle
 
             switch auv.opState(1)
                 case 1  % AUV executing mission
-                    ratePowerUse = auv.missionSpecs(auv.mission, 3)*auv.maxBattery / auv.missionSpecs(auv.mission, 2);  % rate = Battery Wh used / time to use energy
+                    ratePowerUse = auv.missionSpecs(auv.mission, 3)*auv.batteryCapacity / auv.missionSpecs(auv.mission, 2);  % rate = Battery Wh used / time to use energy
                     auv.battery(2) = auv.battery(1) - ratePowerUse*stateTime;
 
                     newBatteryDraw = 0; 
@@ -386,20 +138,20 @@ classdef AUV < handle
                     rateLinPowerTransfer = auv.chargeRate;  % rate of charge in linear region (up to 80%) (no efficiencies applied yet)
                     
                     % Linear region
-                    if auv.battery(2) < (0.8*auv.maxBattery) 
+                    if auv.battery(2) < (0.8*auv.batteryCapacity) 
                         tempBattery = auv.battery(2) + rateLinPowerTransfer*(simTime - auv.batteryTime);
                     end
                     
                     % Charge > 80% region
-                    if (0.8*auv.maxBattery) <= auv.battery(2) || (0.8*auv.maxBattery) < tempBattery    % last battery calc'd is > 80% or temp battery just calc'd is > 80%
+                    if (0.8*auv.batteryCapacity) <= auv.battery(2) || (0.8*auv.batteryCapacity) < tempBattery    % last battery calc'd is > 80% or temp battery just calc'd is > 80%
 
-                        if (0.8*auv.maxBattery) < tempBattery
-                            t_80 = (0.8*auv.maxBattery - auv.battery(2))/rateLinPowerTransfer + auv.batteryTime;  % 80% charge in simulation time
+                        if (0.8*auv.batteryCapacity) < tempBattery
+                            t_80 = (0.8*auv.batteryCapacity - auv.battery(2))/rateLinPowerTransfer + auv.batteryTime;  % 80% charge in simulation time
                             t_newBatteryCalc = simTime - t_80;  % Time for calculation in >80% charge curve (relative to 80% Batt at t = 0)
 
                         else
                             % Calc. time corresponding to the last-calculated battery level (t_current)
-                            t_current = (0.4*auv.maxBattery / rateLinPowerTransfer)*(1 - sqrt( 1+ (4*auv.maxBattery - 5*auv.battery(2))/auv.maxBattery ) );  
+                            t_current = (0.4*auv.batteryCapacity / rateLinPowerTransfer)*(1 - sqrt( 1+ (4*auv.batteryCapacity - 5*auv.battery(2))/auv.batteryCapacity ) );  
                             dt = simTime - auv.batteryTime; 
                             if dt < 0 
                                 error('dt outside of expected range during auv battery calculation')
@@ -408,15 +160,15 @@ classdef AUV < handle
                             t_newBatteryCalc = t_current + dt;
                             
                         end
-                            t_100 = 0.4*auv.maxBattery/rateLinPowerTransfer;
+                            t_100 = 0.4*auv.batteryCapacity/rateLinPowerTransfer;
     
                             if t_newBatteryCalc >= t_100
-                                auv.battery(2) = auv.maxBattery;
+                                auv.battery(2) = auv.batteryCapacity;
                                 newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;
     
                             else
-                                auv.battery(2) = rateLinPowerTransfer*( t_newBatteryCalc - (rateLinPowerTransfer*t_newBatteryCalc^2 / (0.8*auv.maxBattery)) ) + 0.8*auv.maxBattery;
-                                newBatteryDraw = (rateLinPowerTransfer.*( 1 - rateLinPowerTransfer*t_newBatteryCalc/(0.4*auv.maxBattery) ) + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery;  % [W] (d/dt of above + hotel load)
+                                auv.battery(2) = rateLinPowerTransfer*( t_newBatteryCalc - (rateLinPowerTransfer*t_newBatteryCalc^2 / (0.8*auv.batteryCapacity)) ) + 0.8*auv.batteryCapacity;
+                                newBatteryDraw = (rateLinPowerTransfer.*( 1 - rateLinPowerTransfer*t_newBatteryCalc/(0.4*auv.batteryCapacity) ) + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery;  % [W] (d/dt of above + hotel load)
 
                             end
 
@@ -428,11 +180,14 @@ classdef AUV < handle
 
                 case 3  % AUV battery full or WEC in low power mode, WEC recharging itself while supporting auv hotel needs
                     newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;  % Drawing enough from WEC to stay at full charge 
+
+                otherwise
+                    error("Unknown AUV operational state.")
             
             end  % operational cases
             
             auv.batteryTime = simTime; 
-            if abs(newBatteryDraw - auv.wecBatteryDraw) < 0.01
+            if abs(newBatteryDraw - auv.wecBatteryDraw) > 0.01
                 auv.wecBatteryDraw = newBatteryDraw; 
             end
             
@@ -451,7 +206,7 @@ classdef AUV < handle
             %   4) Final 10% AUV recharge
             % simTime - [hr] Simulation time at which operational state  
             %   change occurs 
-
+% fprintf('t=%.4f | AUV %d: state %d → %d\n', simTime, auv.opState(1), newOpState); %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             
             % Update to new operational state
             auv.opState = [newOpState, simTime];
@@ -467,15 +222,15 @@ classdef AUV < handle
                     auv.opTimeComplete = simTime + auv.missionSpecs(auv.mission, 2); 
                 
                 case 2  % recharging
-                    if auv.battery(2) < 0.8*auv.maxBattery
-                        t_80 = ((0.8*auv.maxBattery) - auv.battery(2)) / rateLinPowerTransfer; 
-                        t_full = t_80 + (0.4*auv.maxBattery / rateLinPowerTransfer);
+                    if auv.battery(2) < 0.8*auv.batteryCapacity
+                        t_80 = ((0.8*auv.batteryCapacity) - auv.battery(2)) / rateLinPowerTransfer; 
+                        t_full = t_80 + (0.4*auv.batteryCapacity / rateLinPowerTransfer);
 
                         auv.opTimeComplete = simTime + t_full; 
                     
                     else  % auv.battery(2) >= 0.8*auv.maxBattery
-                        t_full = (0.4*auv.maxBattery / rateLinPowerTransfer);  % not adding t_80 because built into battery charge equation (> 80%) t_80 coincides with 0
-                        t_current = (0.4*auv.maxBattery / rateLinPowerTransfer)*(1 - sqrt( 1+ (4*auv.maxBattery - 5*auv.battery(2))/auv.maxBattery ) );
+                        t_full = (0.4*auv.batteryCapacity / rateLinPowerTransfer);  % not adding t_80 because built into battery charge equation (> 80%) t_80 coincides with 0
+                        t_current = (0.4*auv.batteryCapacity / rateLinPowerTransfer)*(1 - sqrt( 1+ (4*auv.batteryCapacity - 5*auv.battery(2))/auv.batteryCapacity ) );
                         
                         if t_full < t_current
                             error('Problem with opTimeComplete for charging case')
@@ -495,107 +250,4 @@ classdef AUV < handle
 
     end  % Instance Methods
 
-    %{
-    methods (Static)
-        function [batteryLvls, wecBatteryDraw] = calcBatteryLvlArray(auvArray, simTime)
-            % Calculates battery level(s) for AUV(s) at a given time
-            % (simTime) assuming no changes in operational state since the
-            % last battery calculation 
-            % 
-            % INPUTS: 
-            % auvArray - Array of AUV objects (1 x N)
-            % simTime - scalar simulation time for battery calculation
-            %
-            % OUTPUTS: 
-            % batteryLvls - [Wh] (1 x N) Current battery level(s) for each
-            % AUV (columns)
-            % batteryDraw - [W] (1, N) Battery draw for each AUV in array
-
-            N = numel(auvArray); 
-            batteryLvls = zeros(1, N);
-            wecBatteryDraw = zeros(1, N); 
-
-            for k = 1:N
-                % Extract values from inputs
-                opState = auvArray(k).opState; 
-                battery = auvArray(k).battery; 
-                chargeRate = auvArray(k).chargeRate; 
-                maxBattery = auvArray(k).maxBattery; 
-                lastBatteryTime = auvArray(k).batteryTime;
-                hotelLoad = auvArray(k).hotelLoad; 
-                n_powerTransfer = auvArray(k).n_powerTransfer; 
-                n_battery = auvArray(k).n_battery;
-
-                stateTime = simTime - opState(2); 
-
-                % Compute battery level
-                switch opState(1)
-                    case 1  % AUV on-mission
-                        ratePowerUse = auvArray(k).missionSpecs(auvArray(k).mission, 3)*auvArray(k).maxBattery / auvArray(k).missionSpecs(auvArray(k).mission, 2);  % rate = Battery Wh used / time to use energy
-                        batteryLvls(k) = battery(1) - ratePowerUse*stateTime; 
-
-                        wecBatteryDraw(k) = 0; 
-
-                    case 2  % AUV docked & recharging
-                        tempBattery = NaN; 
-                        rateLinPowerTransfer = chargeRate;  % rate of charge in linear region (up to 80%) (no efficiencies applied yet)
-
-                        % Linear region
-                        if battery(2) < (0.8*maxBattery)
-                            tempBattery = battery(2) + rateLinPowerTransfer*(simTime - lastBatteryTime);
-                        end
-
-                        % Charge > 80% region
-                        if (0.8*maxBattery) <= battery(2) || (0.8*maxBattery) < tempBattery    % last battery calc'd is > 80% or temp battery just calc'd is > 80%
-                            
-                            if (0.8*maxBattery) < tempBattery
-                                t_80 = (0.8*maxBattery - battery(2))/rateLinPowerTransfer + lastBatteryTime;  % 80% charge in simulation time
-                                t_newBatteryCalc = simTime - t_80;  % Time for calculation in >80% charge curve (relative to 80% Batt at t = 0)
-    
-                            else  % calc ctime corresponding to the last-calculated battery lvl (t_current)
-                                t_current = (0.4*maxBattery / rateLinPowerTransfer)*(1 - sqrt( 1+ (4*maxBattery - 5*battery(2))/maxBattery ) );  
-                                dt = simTime - lastBatteryTime; 
-                                if dt < 0 
-                                    error('dt outside of expected range during auv battery calculation')
-                                end
-        
-                                t_newBatteryCalc = t_current + dt;
-                                
-                            end
-                            t_100 = 0.4*maxBattery / rateLinPowerTransfer; 
-                            
-                            if t_newBatteryCalc >= t_100
-                                batteryLvls(k) = maxBattery;
-                                wecBatteryDraw(k) = hotelLoad / n_powerTransfer / n_battery;
-        
-                            else
-                                batteryLvls(k) = rateLinPowerTransfer*( t_newBatteryCalc - (rateLinPowerTransfer*t_newBatteryCalc^2 / (0.8*maxBattery)) ) + 0.8*maxBattery;
-                                wecBatteryDraw(k) = (rateLinPowerTransfer.*( 1 - rateLinPowerTransfer*t_newBatteryCalc/(0.4*maxBattery) ) + hotelLoad) / n_powerTransfer /n_battery;  % [W] (d/dt of above + hotel load)
-        
-                            end
-
-                        else  % Battery calculation stays in linear region
-                            if isnan(tempBattery)
-                                error('AUV battery calculation error')
-                            end
-                            
-                            batteryLvls(k) = tempBattery; 
-                            wecBatteryDraw(k) = (rateLinPowerTransfer + hotelLoad) / n_powerTransfer /n_battery * ones(length(stateTime), 1);  % [W]
-    
-                        end
-
-                case 3  % AUV battery full or WEC in low power mode, WEC recharging itself while supporting auv hotel needs
-                    batteryLvls(k) = battery(2);  
-                    wecBatteryDraw(k) = hotelLoad / n_powerTransfer / n_battery;  % Drawing enough from WEC to stay at full charge 
-
-                end
-
-
-            end
-
-
-        end  % calc battery lvl array
-
-    end  % static methods
-    %}
 end  % class def
