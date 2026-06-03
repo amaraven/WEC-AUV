@@ -4,17 +4,18 @@
 classdef AUV < handle   
     % AUV defines the properties and methods (functions) saved in AUV objects.
     % These objects store information on the Unmanned Underwater Vehicle's
-    % properties (model ID, mass, energy storage, endurance, charging rate,
-    % etc...) and can compute values relating to their battery level and
-    % mission duration. 
+    % properties (model ID, mass, battery capacity, endurance, charging 
+    % rate, etc...), and can compute values relating to their battery level
+    % and mission duration. 
     %
     % To create a AUV object named 'auv', use the following syntax. 
-    % auv = AUV(model);
-    % 
-    % Currently supported models 'A' - 'U' are generic examples
+    % auv = AUV(model, mass, batteryCapacity, missionTime,
+    %       missionBatteryUsed, hotelLoad, chargeRate, chargeMethod, 
+    %       batteryRechargeThreshold, n_battery, n_powerTransfer);
 
-    properties (GetAccess = public, SetAccess = public)  %%%%%%%%%%% change set access to private when model is working...
-        % Constants
+
+    properties (GetAccess = public, SetAccess = public)  %%%%%%%%%%%% change set access to private ? %%%%%%%%%%%%%
+        % User-Defined
         model           % Model of auv (i.e. 'Iver3')
         mass            % [kg] Mass of auv 
         mission         % Mission number currently using / running
@@ -26,15 +27,13 @@ classdef AUV < handle
         rechargeThreshold   % [0.XX] Percentage of battery to recharge at. Default is 20%
         n_powerTransfer     % [0.XX] Power transfer efficiency 
         n_battery           % [0.XX] Battery efficiency (losses during charge & discharge)
-
-        % Variables
         
-        % Dependent Constants
+        % Dependent
         chargeTime      % [hr] Column-vector of time to go to 100% charge after respective mission. NOTE: Mission must use >= 20% of battery for this calc to be accurate. 
         chargeLoad      % [Wh] Column-vector of total load put on WEC to charge auv after a given mission, assuming AUV started with a full battery
     end
 
-    % Variables
+    % Simulation variables
     properties (Access = public)
         opState         % Vector containing current operational state and simulation timestamp of respective state change in hours ([opState, t]) with 1) Executing AUV mission, 2) AUV recharging, 3) AUV docked & fully charged
         opTimeComplete  % [hr] Time current opState will be complete
@@ -48,7 +47,6 @@ classdef AUV < handle
     methods
 
         %% Constructor: Creates & returns an object
-        % function auv = AUV(model, mass, missionSpecs, maxBattery, chargeRate, chargeMethod, hotelLoad, rechargeThreshold, n_battery, n_powerTransfer)
         function auv = AUV(model, mass, batteryCapacity, missionTime, missionBatteryUsed, hotelLoad, chargeRate, chargeMethod, batteryRechargeThreshold, n_battery, n_powerTransfer)
             % AUV object constructor generates an object with the given
             % properties. Default values are used if no inputs are given.
@@ -77,7 +75,7 @@ classdef AUV < handle
             auv.n_battery = n_battery;
             auv.n_powerTransfer = n_powerTransfer;
 
-            auv.mission = 1;  % Current auv's only have one mission option, so always will be running 'mission 1
+            auv.mission = 1;  % Current AUVs only have one mission option, so always will be running 'mission 1'
 
             % Dependent Constants
             rateLinPowerTransfer = auv.chargeRate;  % Rate of power transfer in linear region
@@ -121,8 +119,6 @@ classdef AUV < handle
             %   corresponds to the timestep saved as wec.batteryTime
             % auv.batteryTime - [hr] timestep of most recent battery level
             %   saved as battery(2)
-
-            % local vars
 
             stateTime = simTime - auv.opState(2); 
 
@@ -205,8 +201,7 @@ classdef AUV < handle
             %   mission, 2) AUV recharging, 3) AUV docked & fully charged, 
             %   4) Final 10% AUV recharge
             % simTime - [hr] Simulation time at which operational state  
-            %   change occurs 
-% fprintf('t=%.4f | AUV %d: state %d → %d\n', simTime, auv.opState(1), newOpState); %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            %   change occurs (scalar)
             
             % Update to new operational state
             auv.opState = [newOpState, simTime];

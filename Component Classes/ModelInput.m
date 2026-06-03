@@ -1,15 +1,14 @@
 % Ama Hartman
 
 classdef ModelInput < handle
-    % UserInputs defines the properties and methods saved in UserInputs
-    % objects. These objects store user-defined or default inputs for the
-    % 'powerModel.m' simulation. 
+    % ModelInput defines the properties and methods saved in ModelInput
+    % objects. These objects store all inputs neededfor the power model simulation. 
     %
     % User-Defined properties: 
-    % * simHrs: [hr] simulation duration. Default 1 wk
-    % * depVar: variable to change between simulation iterations. Default
+    % - simHrs: [hr] simulation duration. Default 1 wk
+    % - depVar: variable to change between simulation iterations. Default
     %   'AUV Model'
-    % * resourceDataType: Type of resource data. Power in W, time in h,
+    % - resourceDataType: Type of resource data. Power in W, time in h,
     %   distance in m, wave periods in s.
     %   1. Modeled power gen. of 1.5 m WEC in different sea states (1-10)
     %   2. Power generation time series and time vector (*.mat file) 
@@ -18,12 +17,16 @@ classdef ModelInput < handle
     %   height, wave energy and peak periods, and time) (Default)
     %   5. Values of mean wave specifications 
     %   6. Power matrix and wave spec. time series
-    % * incorpStagger: Enforce a stagger between AUV deployments. Default 1
+    % - resourceDataVars: struct containing metadata about user-provided
+    %   resource data
+    % - incorpStagger: Enforce a stagger between AUV deployments. Default 1
     %   (on)
-    % * maxFleetSize: Enforce a maximum AUV fleet size. Default 0 (off)
-    % * userDefinedBattery: Size of user-defined central battery capacity. 
+    % - maxFleetSize: Enforce a maximum AUV fleet size. Default 0 (off)
+    % - userDefinedBattery: Size of user-defined central battery capacity. 
     %   Default 0 (off)
-    % * dtSec: timestep interval in seconds. Default 30 s
+    % - dtSec: timestep interval in seconds. Default 30 s
+    % - auvModels: cell array containing AUV model name(s)
+    % - outputPlots: Struct containing output plots selected to generate
 
     % User-defined properties
     properties (GetAccess = public, SetAccess = private)
@@ -44,9 +47,6 @@ classdef ModelInput < handle
         dt % [hr]
         simTime % [hr]
     end
-
-    % properties (Hidden = true)  % Hidden from property lists, property written directly from GUI
-    % end
 
 
     %% Instance Methods (need object as an input)
@@ -89,7 +89,7 @@ classdef ModelInput < handle
 
         %% Dependent property calcs
         function dt = get.dt(mi)
-            dt = mi.dtSec /60 /60;  %[hr]
+            dt = mi.dtSec /60 /60;  % [hr]
         end
 
         function simTime = get.simTime(mi)
@@ -98,119 +98,7 @@ classdef ModelInput < handle
         end
 
 
-
         %% Load Resource Data, convert to powerGen time series
-%{
-        function extractDataInfo(mi)
-            % Given user-inputs, extract metainformation needed to load and 
-            % process input data
-
-            switch mi.resourceDataType
-                case 1  % Proteus struct containing power generated during different sea states
-                    if strcmp(mi.depVar, 'AUV Model')
-                        mi.resourceDataVars.seaState = listdlg('PromptString',{'Specify the sea state you would like to use for this simulation'}, 'SelectionMode','single', ...
-                                'ListString',{'1','2','3','4','5','6','7','8','9','10'});
-                    end
-
-                case 2  % Time series of power gen
-                    switch mi.depVar
-                        case 'AUV Model'
-                            mi.resourceDataVars.dataFiles = uigetfile('*.mat', 'Select *.mat data files','MultiSelect','on');
-                            fileVars = whos('-file', mi.resourceDataVars.dataFiles); 
-
-                        case 'WEC Power Gen. / Wave Resource' 
-                            mi.resourceDataVars.dataFiles = uigetfile('*.mat', 'Select *.mat data files','MultiSelect','on');
-                            if ischar(mi.resourceDataVars.dataFiles)  % if only one is selected
-                                mi.resourceDataVars.dataFiles = {mi.resourceDataVars.dataFiles};
-                            end
-            
-                            fileVars = whos('-file', mi.resourceDataVars.dataFiles{1});
-                    end
-                    tIndx = listdlg('PromptString',{'Select the time series vector'}, 'SelectionMode','single', ...
-                            'ListString',{fileVars.name});
-                    pwrIndx = listdlg('PromptString',{'Select the power gen. time series'}, 'SelectionMode','single', ...
-                            'ListString',{fileVars.name});
-
-                    mi.resourceDataVars.tVarName = fileVars(tIndx).name;
-                    mi.resourceDataVars.pwrVarName = fileVars(pwrIndx).name;
-
-                case 3  % Value of mean power
-                    mi.resourceDataVars.meanPower = input('Enter mean power generated as a single value or a bracketed, comma-seperated list: ');
-
-                case 4 % Time series of wave specs (Hs, Te, Tp)
-                    switch mi.depVar
-                        case 'AUV Model'
-                            mi.resourceDataVars.dataFiles = uigetfile('*.csv', 'Select *.csv Data File', 'MultiSelect','off');
-                            mi.resourceDataVars.dataFiles = {mi.resourceDataVars.dataFiles};
-                            
-                        case 'WEC Power Gen. / Wave Resource'
-                            mi.resourceDataVars.dataFiles = uigetfile('*.csv', 'Select *.csv Data Files', 'MultiSelect','on');
-                            if ischar(mi.resourceDataVars.dataFiles)
-                                mi.resourceDataVars.dataFiles = {mi.resourceDataVars.dataFiles};
-                            end
-                    end
-
-                case 5 % Mean Wave specs (Hs, Te, Tp)
-                    % examples:
-                    % sigWaveHeight = [1.8774    1.8800    1.9000    2.2000    1.6000]';
-                    % energyPeriod = [8.9367    8.9400    9.0000    9.0000    8.8000]';
-                    % peakPeriod = [13.1428   13.1400   13.1400   13.1400   10.1000]';
-                    prompt = {'Enter significant wave height(s) [m]:', 'Enter wave energy period(s) [s]:','Enter peak period(s) [s]:'};
-                    fieldsize = [1, 45; 1, 45; 1, 45];
-                    switch mi.depVar
-                        case 'AUV Model'
-                            defaultInputs = {'1.8774','8.9367','13.1428'};
-                        case 'WEC Power Gen. / Wave Resource'
-                            defaultInputs = {'[1.8774, 1.8800, 1.9000, 2.2000, 1.6000]','[8.9367, 8.9400, 9.0000, 9.0000, 8.8000]','[13.1428, 13.1400, 13.1400, 13.1400, 10.1000]'};
-                    end
-                    tryAgain = 1;  % preallocate
-                    while tryAgain == 1
-                        waveSpecDlg = inputdlg(prompt, 'Wave Resource Specifications', fieldsize, defaultInputs);
-                        sigWaveHeight = str2num(waveSpecDlg{1});
-                        energyPeriod = str2num(waveSpecDlg{2});
-                        peakPeriod = str2num(waveSpecDlg{3});
-            
-                        if isequal( size(sigWaveHeight), size(energyPeriod), size(peakPeriod) )
-                            tryAgain = 0;
-                        else
-                            warning('Each specification must have the same number of values. Please re-enter the wave resource specifications.')
-                        end
-                    end
-                    
-                    mi.resourceDataVars.waveSpecTable = table(sigWaveHeight', energyPeriod', peakPeriod','VariableNames',{'SignificantWaveHeight','EnergyPeriod','PeakPeriod'});
-
-                case 6 % Power matrix & Hs, Te time series
-                    switch mi.depVar
-                        case 'AUV Model'
-                            mi.resourceDataVars.dataFiles = uigetfile('*.mat', 'Select *.mat data file for time series','MultiSelect','off');
-                            fileVars = whos('-file', mi.resourceDataVars.dataFiles);
-                            mi.resourceDataVars.dataFiles = {mi.resourceDataVars.dataFiles};
-                        case 'WEC Power Gen. / Wave Resource' 
-                            mi.resourceDataVars.dataFiles = uigetfile('*.mat', 'Select *.mat data files','MultiSelect','on');
-                            if ischar(mi.resourceDataVars.dataFiles)  % if only one is selected
-                                mi.resourceDataVars.dataFiles = {mi.resourceDataVars.dataFiles};
-                            end                
-                            fileVars = whos('-file', mi.resourceDataVars.dataFiles{1});
-                    end
-                    
-
-                    pMatIndx = listdlg('PromptString',{'Select the power matrix variable'}, 'SelectionMode','single', ...
-                            'ListString',{fileVars.name});
-                    tIndx = listdlg('PromptString',{'Select the time series vector'}, 'SelectionMode','single', ...
-                            'ListString',{fileVars.name});
-                    HsIndx = listdlg('PromptString',{'Select the significant wave height time series'}, 'SelectionMode','single', ...
-                            'ListString',{fileVars.name});
-                    TeIndx = listdlg('PromptString',{'Select the wave energy period time series'}, 'SelectionMode','single', ...
-                            'ListString',{fileVars.name});
-
-                    mi.resourceDataVars.pMatVarName = fileVars(pMatIndx).name;
-                    mi.resourceDataVars.tVarName = fileVars(tIndx).name;
-                    mi.resourceDataVars.HsVarName = fileVars(HsIndx).name;
-                    mi.resourceDataVars.TeVarName = fileVars(TeIndx).name;
-            end
-        end
-        %}
-
         function calcPowerGen(mi, wec, modOut, depVarCount)
             % From user-input data, calculates power generation vector and
             % saves in modOut object.
@@ -226,12 +114,6 @@ classdef ModelInput < handle
                 depVarCount (1,1) {mustBePositive, mustBeInteger} = 1
             end
 
-            % % If metadata has not yet been loaded..
-            % if isempty(mi.rdVars)
-            %         warning('Must load data first. Loading data...')
-            %         mi.extractDataInfo;
-            % end
-
             % Calculate and save power gen
             switch mi.resourceDataType
                 case 1 % Proteus struct containing power generated during different sea states
@@ -241,17 +123,17 @@ classdef ModelInput < handle
                     % extract seaState to use for power calc.
                     switch mi.depVar
                         case 'AUV Model'
-                            seaState = mi.resourceDataVars.seaState;
+                            seaState = str2double(mi.resourceDataVars.seaState);
                         case 'WEC Power Gen. / Wave Resource'
                             seaState = depVarCount;
                     end
                     
                     % calc
-                    wec.reshapePowerGen(RM3(seaState).Power, RM3(seaState).Time, mi.simHrs, mi.dt);  
+                    wec.reshapePowerGen(RM3(seaState).Power, RM3(seaState).Time/60/60, mi.simHrs, mi.dt);  % Time must be in hours
                     
                     % save
                     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;  % save power gen
-                    modOut.seaState(depVarCount) = seaState;  % save sea state
+                    modOut.dataIn.seaState(depVarCount) = seaState;  % save sea state
 
                 case 2 % Time series of power gen
                     % load data
@@ -259,7 +141,7 @@ classdef ModelInput < handle
                     pGen_dataTime = load(mi.resourceDataVars.dataFiles{depVarCount}, mi.resourceDataVars.pwrVarName);
 
                     % reshape power gen. to fit simulation timestep
-                    wec.reshapePowerGen(pGen_dataTime, dataTime, mi.simHrs, mi.dt);
+                    wec.reshapePowerGen(pGen_dataTime.(mi.resourceDataVars.pwrVarName), dataTime.(mi.resourceDataVars.tVarName), mi.simHrs, mi.dt);  % Time must  be in hr
                      
                     % save
                     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
@@ -276,18 +158,43 @@ classdef ModelInput < handle
                     wec.powerGenMeans = ones(size(mi.simTime)) * wec.meanPowerGen; 
 
                 case 4 % Time series of wave specs (Hs, Te, Tp)
-                    % load data
-                    mi.resourceDataVars.dataTable = readtable(mi.resourceDataVars.dataFiles{depVarCount},'VariableNamingRule','modify');
+                    % Determine filetype, load data, & build data struct
+                    [~, ~, ext] = fileparts(mi.resourceDataVars.dataFiles{depVarCount});
+                    if strcmp(ext, '.csv')
+                        mi.resourceDataVars.dataTable = readtable(mi.resourceDataVars.dataFiles{depVarCount},'VariableNamingRule','modify');
+                        
+                        waveData.sigWaveHeight = mi.resourceDataVars.dataTable.SignificantWaveHeight; 
+                        waveData.waveEnergyPeriod = mi.resourceDataVars.dataTable.EnergyPeriod;
+                        waveData.peakPeriod = mi.resourceDataVars.dataTable.PeakPeriod;
+                        dataDateTimes = datetime(mi.resourceDataVars.dataTable.Year, mi.resourceDataVars.dataTable.Month, mi.resourceDataVars.dataTable.Day, mi.resourceDataVars.dataTable.Hour, mi.resourceDataVars.dataTable.Minute, zeros(size(mi.resourceDataVars.dataTable.Year)));
+                        waveData.dataTime = hours(dataDateTimes-dataDateTimes(1) + (dataDateTimes(2)-dataDateTimes(1)));
+
+                    elseif strcmp(ext, '.mat')
+                        rawData = load(mi.resourceDataVars.dataFiles{depVarCount});
+
+                        waveData.sigWaveHeight = rawData.(mi.resourceDataVars.HsVarName);
+                        waveData.waveEnergyPeriod = rawData.(mi.resourceDataVars.TeVarName);
+                        waveData.peakPeriod = rawData.(mi.resourceDataVars.TpVarName); 
+                        waveData.dataTime = rawData.(mi.resourceDataVars.tVarName);
+
+                    else
+                        error('Data filetype is not currently supported. Supported filetypes include *.csv and *.mat.')
+                    end
 
                     % calculate
-                    wec.calcPowerGen(mi.resourceDataVars.dataTable,'meanPwr', mi.simTime, 0, 403); %% set windowOverrideIndx to 403 (and use Oregon dataset) to replicate paper results, otherwise set to 0  
+                    % wec.calcPowerGen(mi.resourceDataVars.dataTable,'meanPwr', mi.simTime, 0, 403); %% set windowOverrideIndx to 403 (and use Oregon dataset) to replicate paper results, otherwise set to 0  
+                    wec.calcPowerGen(waveData,'meanPwr', mi.simTime, 0, 403); %% set windowOverrideIndx to 403 (and use Oregon dataset) to replicate paper results, otherwise set to 0  
 
                     % save
                     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
 
                 case 5 % Mean Wave specs (Hs, Te, Tp)
+                    waveData.sigWaveHeight = mi.resourceDataVars.sigWaveHeight(depVarCount); 
+                    waveData.waveEnergyPeriod = mi.resourceDataVars.energyPeriod(depVarCount);
+                    waveData.peakPeriod = mi.resourceDataVars.peakPeriod(depVarCount);
                     % calculate
-                    wec.calcPowerGen(mi.resourceDataVars.waveSpecTable(depVarCount,:), [], mi.simTime, 0, 0);
+                    % wec.calcPowerGen(mi.resourceDataVars.waveSpecTable(depVarCount,:), [], mi.simTime, 0, 0);
+                    wec.calcPowerGen(waveData, [], mi.simTime, 0, 0);
                     wec.lowPowerGen = 0.75*wec.meanPowerGen; 
                     wec.powerGenMeans = ones(size(mi.simTime)) * wec.meanPowerGen;
 
@@ -306,13 +213,9 @@ classdef ModelInput < handle
                     pGen_dataTime = pMatTableFn(Hs, Te); 
 
                      % reshape power gen
-                    wec.reshapePowerGen(pGen_dataTime, dataTime, mi.simHrs, mi.dt);
+                    wec.reshapePowerGen(pGen_dataTime, dataTime, mi.simHrs, mi.dt);  %%%%%%%%%%% time must be in hr
                     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
             end
-
-        end
-        
-
-
+        end  % calc power gen fn
     end  % methods
 end

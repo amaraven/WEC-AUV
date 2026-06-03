@@ -1,7 +1,7 @@
 % Ama Hartman
 
 function [eStorageBatteryLvl, wecBatteryLvl, auvBatteryLvl, auvSchedule] = runPowerModel(simTime, wec, auvFleet, energyStorage, incorpStagger)
-% simulateOperation steps through each timestep for the given simulation, 
+% runPowerModel steps through each timestep for the given simulation, 
 % calculates battery levels of the WEC and all AUVs in its assigned fleet,
 % and generates an operational state schedule for the AUV(s). 
 %
@@ -14,12 +14,12 @@ function [eStorageBatteryLvl, wecBatteryLvl, auvBatteryLvl, auvSchedule] = runPo
 % - incorpStagger: Flag to (1) stagger AUV deployments, or (0) not
 %
 % Outputs: 
+% - eStorageBatteryLvl: [Wh] (nx1) time series of central battery level
 % - wecBatteryLvl: [Wh] (nx1) time series of WEC battery level
 % - auvBatteryLvl: [Wh] (nxm) time series of AUV battery level(s) with m
 %   corresponding to each auv in auvFleet
 % - auvSchedule: time series of AUV operational state schedule with 1)
 %   Executing AUV mission, 2) Recharging, 3) Docked and fully charged
-% -------------------------------------------------------------------------
 
 
 %% Pre-Timestep Calculations
@@ -66,7 +66,6 @@ for i = 1:length(simTime)
         warning('Low WEC battery. Need to implement WEC energy draw from central storage.')
     end
 
-    %%
     auvOpStates = [auvFleet.opState];
     auvOpStates = auvOpStates(1:2:end);  % save only current operational state
 
@@ -91,18 +90,10 @@ for i = 1:length(simTime)
     
     %% AUV Battery
     % Calculate and save AUV battery level(s)
-    % arrayfun(@(auv) auv.calcBatteryLvl(simTime(i)), auvFleet);
-    % Maybe a for loop is faster?
     for j = 1:length(auvFleet)
         auvFleet(j).calcBatteryLvl(simTime(i));
+        auvBatteryLvl(i, j) = auvFleet(j).battery(2);  % Extract current battery lvl
     end
-    % [batteryLvls, wecBatteryDraw] = AUV.calcBatteryLvlArray(auvFleet, simTime(i));
-    % for idx = 1:length(auvFleet)
-    %     auvFleet(idx).battery(2) = batteryLvls(idx); 
-    %     auvFleet(idx).wecBatteryDraw = wecBatteryDraw(idx); 
-    % end   
-    intBatteries = [auvFleet.battery];
-    auvBatteryLvl(i,:) = intBatteries(2,:);
     
 
     %% AUV Operational State
@@ -110,8 +101,6 @@ for i = 1:length(simTime)
     
     % If central storage goes into battery-save mode, stop charging AUV(s)
     if eStorageLowBatteryFlag == 1
-        % indxCharging = auvOpStates == 2; 
-        % arrayfun(@(auv) auv.changeOpState(3, simTime(i)), auvFleet(indxCharging));
         indxCharging = find(auvOpStates == 2);
         if any(indxCharging)
             for k = 1:length(indxCharging)
@@ -119,10 +108,7 @@ for i = 1:length(simTime)
             end
         end
 
-
     else  % start charging auv's docked and still below max battery
-        % indxNeedCharge = logical( (auvOpStates == 3) .* (auvBatteryLvl(i,:) < [auvFleet.batteryCapacity]) );  
-        % arrayfun(@(auv) auv.changeOpState(2, simTime(i)), auvFleet(indxNeedCharge)); 
         indxNeedCharge = find(logical( (auvOpStates == 3) .* (auvBatteryLvl(i,:) < [auvFleet.batteryCapacity]) ));   
         if any(indxNeedCharge)
             for l = 1:length(indxNeedCharge)
@@ -134,8 +120,6 @@ for i = 1:length(simTime)
 
     % Deployed AUV completes mission & returns
     onMissionLogic = (auvOpStates == 1);
-    % indxMissionComplete = logical( onMissionLogic .* ([auvFleet.opTimeComplete] <= simTime(i)) );
-    % arrayfun(@(auv) auv.changeOpState(2, simTime(i)), auvFleet(indxMissionComplete));
     indxMissionComplete = find(logical( onMissionLogic .* ([auvFleet.opTimeComplete] <= simTime(i)) ));
     if any(indxMissionComplete)
         for m = 1:length(indxMissionComplete)
@@ -144,8 +128,6 @@ for i = 1:length(simTime)
     end
 
     % Charging AUV finishes charging: 
-    % indxChargingComplete = logical( (auvOpStates == 2) .* ([auvFleet.opTimeComplete] <= simTime(i)) ); 
-    % arrayfun(@(auv) auv.changeOpState(3, simTime(i)), auvFleet(indxChargingComplete)); 
     indxChargingComplete = find(logical( (auvOpStates == 2) .* ([auvFleet.opTimeComplete] <= simTime(i)) ));
     if any(indxChargingComplete)
         for n = 1:length(indxChargingComplete)
@@ -171,21 +153,18 @@ for i = 1:length(simTime)
             
         % If estimated battery is above 0, and the central battery is not expected to drop below 0, send auv on mission
         if (eStorageFutureBattery > 0) && (eStorageNoBatteryFlag == 0) 
-            arrayfun(@(auv) auv.changeOpState(1,simTime(i)), auvFleet(auvToDeploy));
-            % auvFleet(auvToDeploy).changeOpState(1, simTime(i));  % Don't need arrayfun, because only deploying one AUV, so single index
+            auvFleet(auvToDeploy).changeOpState(1, simTime(i)); 
             simTimeLastDeployment = simTime(i);
             
         end
     end
 
     % Save timestep operational states
-    % auvSchedule(i, :) = arrayfun(@(auv) auv.opState(1), auvFleet);
     for p = 1:length(auvFleet)
         auvSchedule(i, p) = auvFleet(p).opState(1); 
     end
 
 end  % timesteps
-
 
 % Save battery levels for simulation domain
 wecBatteryLvl = wecBatteryLvl(1:end-1); 

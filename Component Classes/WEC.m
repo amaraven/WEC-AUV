@@ -7,13 +7,10 @@ classdef WEC < handle
     % relating to their energy generation and battery level. 
     % 
     % To create a WEC object named 'wec', use the following syntax. 
-    % wec = WEC(model);
-    % 
-    % Currently supported models include the following: 
-    % 'generic' - A generic placeholder! How exciting.
+    % wec = WEC(model, characteristicDimension, batteryCapacity, hotelLoad, n_hydro, n_gen, n_battery);
 
+    % Constants
     properties (GetAccess = public, SetAccess = private)
-        % Constants
         model           % Model of WEC
         charDim         % [m] Characteristic dimension (sqrt(4*A/pi) w/ A = device's max horizontal cross-sectional area)
         batteryCapacity % [Wh] Total energy storage onboard
@@ -26,11 +23,10 @@ classdef WEC < handle
     % Variables
     properties (Access = public)
         battery         % [Wh] Value of current battery level
-        % powerGenTime    % [h] Time series corresponding to energy generation
-        % powerGen        % [W] Rate of energy generation (given wave profile)
         powerGenMeans   % [W] Rate of energy generation given wave profile at simulation timesteps (mean values of power at data timesteps)
         meanPowerGen    % [W] Mean value of power generation 
         lowPowerGen     % [W] Mean of lowest generation window (window sized to accomodate AUV charging) OR 0.75% of mean for constant resource inputs
+        % cumPwrGen       % [W] Cumulative power generation starting at 0 (used for central battery estimation calculations)
     end
     
     properties (Dependent)
@@ -76,10 +72,8 @@ classdef WEC < handle
 
         %% Dependent property calcs..
         function lowBatteryLvl = get.lowBatteryLvl(wec)
-
             % Sets the low battery level to 5% of the maximum capacity
             lowBatteryLvl = 0.05*wec.batteryCapacity;  
-        
         end
 
         
@@ -112,22 +106,53 @@ classdef WEC < handle
             %
             % Inputs: 
             % - powerData: [W] nx1 vector of power as a function of time
-            % - timeData: [s] nx1 vector of time corresponding to powerData
+            % - timeData: [hr] nx1 vector of time corresponding to powerData
             % - simHrs: [hr] Simulation hours
             % - dt: [hr] Simulation timestep
 
             % Time series calculations
             powerData_dt = mean(diff(timeData));  
-            simSeconds = powerData_dt:powerData_dt:simHrs*60*60;  % Time series for length of simulation with timestep defined by wave resource data
-            powerGenTime = simSeconds'/60/60;  % Time series corresponding to powerGen in hours
 
-            % Create vector of repeating power generation for the length of simulation.
-            powerGen = powerData(mod(0:length(simSeconds)-1, length(powerData)) +1) * wec.n_gen;  
+            % Resample data to fit simulation timestep (dt)
+            if powerData_dt ~= dt
+                timeDataResampled = (dt:dt:timeData(end))';
+                powerDataResampled = interp1(timeData, powerData, timeDataResampled, 'linear', powerData(1)) * wec.n_gen;  % Fills NaN values at beginning (between t = 0 and t = timeData(1)) with powerData(1)
+            else
+                timeDataResampled = timeData;
+                powerDataResampled = powerData * wec.n_gen;
+            end
 
-            % Reshape power generation according to simulation timesteps
-            powerGenReshaped = reshape(powerGen, dt/(powerGenTime(2)-powerGenTime(1)), []);
-            wec.powerGenMeans = (mean(powerGenReshaped, 1))';  %  [W]   
-            wec.meanPowerGen = mean(wec.powerGenMeans);  % [W]
+            % Resize time series to fit simulation length (simHrs)
+            if timeDataResampled(end) < simHrs
+                % repeat data 
+                timeDataResized = (dt:dt:simHrs)';  % new timestep matches simulation (dt)
+                powerDataResized = powerDataResampled(mod(0:length(timeDataResized)-1, length(powerDataResampled)) +1);
+
+            elseif timeDataResampled(end) > simHrs 
+                % Need to trim data to simulation length
+                trimIndx = find(timeDataResampled <= simHrs, 1, 'last');
+                powerDataResized = powerDataResampled(1:trimIndx);
+
+            else
+                % timeData == simHrs --> no resizing needed
+                powerDataResized = powerDataResampled;
+            end
+
+            wec.powerGenMeans = powerDataResized; 
+            wec.meanPowerGen = mean(powerDataResized);
+
+
+            % simSeconds = powerData_dt:powerData_dt:simHrs*60*60;  % Time series for length of simulation with timestep defined by wave resource data
+            % powerGenTime = simSeconds'/60/60;  % Time series corresponding to powerGen in hours
+            % 
+            % % Create vector of repeating power generation for the length of simulation.
+            % powerGen = powerData(mod(0:length(simSeconds)-1, length(powerData)) +1) * wec.n_gen;  
+            % 
+            % % Reshape power generation according to simulation timesteps
+            % powerGenReshaped = reshape(powerGen, dt/(powerGenTime(2)-powerGenTime(1)), []);
+            % wec.powerGenMeans = (mean(powerGenReshaped, 1))';  %  [W]   
+            % wec.meanPowerGen = mean(wec.powerGenMeans);  % [W]
+            % % wec.cumPwrGen = [0; cumsum(wec.powerGenMeans)];
 
         end  % power gen fn
 
@@ -138,36 +163,34 @@ classdef WEC < handle
             % gven wave profile characteristics
             % 
             % INPUTS: 
-            % - waveData: Table containing at least 'SignificantWaveHeight', 'EnergyPeriod' and 'PeakPeriod'
+            % - waveData: Struct including 'sigWaveHeight',
+            %   'waveEnergyPeriod', 'peakPeriod', and 'dataTime' vectors
             % - dataWindowSelection: either 'minPwr', 'maxPwr', or
             %   'meanPwr' indicating whether the user wants to pull the
             %   min/max/mean power generation window.
             % - simTime: [hr] Time series vector used for simulation
             % - WindowOverrideIndx: Index of wave data time series to use
-            % for the simulation starting point, 0 to use window selection
-            % based on min/max/mean power generation window
+            %   for the simulation starting point, 0 to use window selection
+            %   based on min/max/mean power generation window. Set to 403 and
+            %   use Oregon (US West Coast) dataset to replicate JOE paper
 
             % Constants
             rho = 1025;  % [kg/m^3] Seawater Density
             g = 9.81;  % [m/s^2] Gravitational acceleration
             
             % Power Calculations
-            wavePwrDensity = rho * g^2 * waveData.SignificantWaveHeight.^2 .* waveData.EnergyPeriod / (64*pi);  % [W/m]
+            wavePwrDensity = rho * g^2 * waveData.sigWaveHeight.^2 .* waveData.waveEnergyPeriod / (64*pi);  % [W/m]
             pwrGen = wavePwrDensity * wec.charDim * wec.n_hydro * wec.n_gen; 
-            budalLimit = rho * g * pi^2 * (wec.charDim/2)^3 * waveData.SignificantWaveHeight ./ (6 * waveData.PeakPeriod); 
+            budalLimit = rho * g * pi^2 * (wec.charDim/2)^3 * waveData.sigWaveHeight ./ (6 * waveData.peakPeriod); 
 
             wecPwrGen = min(pwrGen, budalLimit);
 
-            if all(ismember({'Year', 'Month', 'Day', 'Hour', 'Minute', 'EnergyPeriod', 'PeakPeriod', 'SignificantWaveHeight'}, waveData.Properties.VariableNames))
-                
-                % Data time vector (entire year)
-                dataDateTimes = datetime(waveData.Year, waveData.Month, waveData.Day, waveData.Hour, waveData.Minute, zeros(size(waveData.Year)));
-                dataTime = hours(dataDateTimes-dataDateTimes(1)+ (dataDateTimes(2)-dataDateTimes(1)));
+            if ~isscalar(wecPwrGen)  %all(ismember({'Year', 'Month', 'Day', 'Hour', 'Minute', 'EnergyPeriod', 'PeakPeriod', 'SignificantWaveHeight'}, waveData.Properties.VariableNames)) %%%%%%%%%%%
 
-                dataDt = dataTime(2) - dataTime(1); 
+                dataDt = waveData.dataTime(2) - waveData.dataTime(1); 
     
                 % If data shorter than simulation, need to repeat.. 
-                if dataTime(end) < simTime(end)  % Data window < simulation window & need to do some repeats. This still needs to be tested.
+                if waveData.dataTime(end) < simTime(end)  % Data window < simulation window & need to do some repeats. This still needs to be tested.
                     dataTimeSeries = dataDt:dataDt:simTime(end);
                     wecPowerGenWindowed = wecPwrGen(mod(0:length(dataTimeSeries)-1, length(wecPwrGen)) +1);  % repeating power for length of simulation
 
@@ -177,7 +200,7 @@ classdef WEC < handle
                     tmpMeans = movmean(wecPwrGen, window);
                     tmpMeans(1:floor(0.5*window)) = NaN;  % Cut out truncated windows
                     tmpMeans(end-floor(0.5*window):end) = NaN;
-                    dataTimeWindowed = dataTime(1:window+1);
+                    dataTimeWindowed = waveData.dataTime(1:window+1);
         
                     switch dataWindowSelection
                         case 'minPwr'
@@ -198,27 +221,38 @@ classdef WEC < handle
 
                 else  % windowOverrideIndx ~= 0  % Pull time period for simulation as defined by given override index
                     window = ceil(simTime(end)/dataDt);
-                    dataTimeWindowed = dataTime(1:window+1);
+                    dataTimeWindowed = waveData.dataTime(1:window+1);
                     wecPowerGenWindowed = wecPwrGen(windowOverrideIndx : windowOverrideIndx + window);
 
                 end
     
-                if hours(dataDateTimes(2)-dataDateTimes(1)) > 1
-                    % Interpolate to up-sample data to simTime 
-                    wec.powerGenMeans = interp1((dataTimeWindowed- dataDt), wecPowerGenWindowed, simTime);
+                simDt = simTime(2) - simTime(1);
 
-                elseif hours(dataDateTimes(2)-dataDateTimes(1)) < 1
-                    % Down-sample data to simTime
-                    wec.powerGenMeans = reshape(wecPowerGenWindowed, (simTime(2)-simTime(1))/(dataDt), []);
-
+                % if dataDt > simDt 
+                %     % Data timestep is greater than simulation timestep --> interpolate to up-sample data to simTime 
+                %     wec.powerGenMeans = interp1((dataTimeWindowed- dataDt), wecPowerGenWindowed, simTime);
+                % 
+                % elseif dataDt < simDt  % if data timestep is shorter than simulation timestep... 
+                %     % Data timestep is shorter than simulation timestep --> down-sample data to simTime
+                %     wec.powerGenMeans = reshape(wecPowerGenWindowed, simDt/dataDt, []);
+                % 
+                % else
+                %     % No resampling needed!
+                %     wec.powerGenMeans = wecPowerGenWindowed;
+                % 
+                % end
+                if dataDt ~= simDt
+                    % resample to match simulation timestep
+                    wec.powerGenMeans = interp1((dataTimeWindowed-dataDt), wecPowerGenWindowed, simTime);
                 else
-                    % No resampling needed!
+                    % no resampling needed
                     wec.powerGenMeans = wecPowerGenWindowed;
-
                 end
 
                 % Save final power gen. vector
                 wec.meanPowerGen = mean(wec.powerGenMeans); 
+
+                % wec.cumPwrGen = [0; cumsum(wec.powerGenMeans)];
 
                 if plotPwrGen == 1
                     %% Plot Power Generation during simulation window 
@@ -237,14 +271,12 @@ classdef WEC < handle
                     hold on; plot(tempDatetimes, wec.meanPowerGen * ones(size(tempDatetimes)));
                 end
 
-            elseif isequal({'SignificantWaveHeight', 'EnergyPeriod', 'PeakPeriod'}, waveData.Properties.VariableNames)  % If input is a table with single values...
-                wec.meanPowerGen = wecPwrGen;
-
             else 
-                error('Problem calculating power generation. Unrecognized wave resource data format.')
+                wec.meanPowerGen = wecPwrGen;
+                wec.powerGenMeans = wecPwrGen * ones(size(simTime));
+                
             end
 
         end  % calc power gen fn
-
     end  % Instance Methods
 end  % class def

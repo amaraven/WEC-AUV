@@ -1,4 +1,4 @@
-% Ama Hartman - Su 2025
+% Ama Hartman
 
 %% Define Class
 classdef EnergyStorage < handle  
@@ -9,10 +9,10 @@ classdef EnergyStorage < handle
     %
     % To crate an EnergyStorage object named 'energyStorage', use the
     % following syntax: 
-    % energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad, dockHotelLoad)
+    % energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad,
+    %                 dockHotelLoad, n_battery, n_wecPowerTransfer, n_dockPowerTransfer);
 
     properties (GetAccess = public, SetAccess = private)
-        % userDefinedBattery  % 1/0 - User input max battery / model outputs battery capacity
         baseHotelLoad   % [W] Hotel load of unit, excluding docks
         dockHotelLoad   % [W] Hotel load of a single AUV dock
         n_battery       % Battery efficiency [0.XX]
@@ -34,7 +34,6 @@ classdef EnergyStorage < handle
     methods
 
         %% Constructor: Creates & returns an EnergyStorage object
-        % function energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad, dockHotelLoad)
         function energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad, dockHotelLoad, n_battery, n_wecPowerTransfer, n_dockPowerTransfer)
             % EnergyStorage object constructor generates an object with the given
             % properties. Default values are used if no inputs are given.
@@ -42,16 +41,11 @@ classdef EnergyStorage < handle
                 batteryCapacity (1,1) {mustBeNumeric, mustBeNonnegative} = 0  % Total energy storage
                 baseHotelLoad (1,1) {mustBeNumeric, mustBeNonnegative} = 10  % [W] Hotel load of unit, excluding AUV docks
                 dockHotelLoad (1,1) {mustBeNumeric, mustBeNonnegative} = 20  % [W] Hotel load of a single AUV dock
-                % userDefinedBattery (1,1) {mustBeNumeric, mustBeMember(userDefinedBattery, [0, 1])} = 0  % (1) User provided battery capacity, (0) model outputs battery capacity
                 n_battery (1,1) {mustBeNumeric,  mustBeInRange(n_battery, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Battery efficiency
                 n_wecPowerTransfer (1,1) {mustBeNumeric,  mustBeInRange(n_wecPowerTransfer, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Power transfer efficiency between the WEC & central battery
                 n_dockPowerTransfer (1,1) {mustBeNumeric,  mustBeInRange(n_dockPowerTransfer, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Power transfer efficiency between the central battery and docks
             end
-            % if batteryCapacity == 0
-            %     energyStorage.userDefinedBattery = 0;
-            % else
-            %     energyStorage.userDefinedBattery = 1;
-            % end
+
             energyStorage.batteryCapacity = batteryCapacity; 
             energyStorage.baseHotelLoad = baseHotelLoad;
             energyStorage.dockHotelLoad = dockHotelLoad;
@@ -116,10 +110,7 @@ classdef EnergyStorage < handle
             auv_n_battery = zeros(1, numAUVs); 
             auvOpState =zeros(1, numAUVs); 
             auvOpTimeComplete = zeros(1, numAUVs); 
-            % auvMission = zeros(1, numAUVs); 
-            % auvMissionBattUsed = zeros(1, numAUVs); 
             auvMissionTime = zeros(1, numAUVs); 
-            % auvMaxBatt = zeros(1, numAUVs);
             auvChargeTime = zeros(1, numAUVs);
             eStorageNoBatteryFlag = 0; 
 
@@ -132,10 +123,7 @@ classdef EnergyStorage < handle
                 auv_n_battery(auvNum) = auv.n_battery; 
                 auvOpState(auvNum) = auv.opState(1);
                 auvOpTimeComplete(auvNum) = auv.opTimeComplete;
-                % auvMission(auvNum) = auv.mission;
-                % auvMissionBattUsed(auvNum) = auv.missionSpecs(auv.mission, 3) * auv.batteryCapacity;
                 auvMissionTime(auvNum) = auv.missionSpecs(auv.mission, 2); 
-                % auvMaxBatt(auvNum) = auv.batteryCapacity;
                 auvChargeTime(auvNum) = auv.chargeTime;
             end  
 
@@ -151,9 +139,13 @@ classdef EnergyStorage < handle
             
             % Calculate power generation overflow during mission + charge
             wecPwrGenFx = mean(wec.powerGenMeans(int32(simTime/dt) : int32(min(t_return/dt, length(wec.powerGenMeans))) ));
+            % Slightly faster (?) than using mean() each timestep this fn is called...
+            % i1 = int32(simTime/dt);
+            % i2 = int32(min(t_return/dt, length(wec.powerGenMeans)));
+            % wecPwrGenFx = (wec.cumPwrGen(i2+1) - wec.cumPwrGen(i1)) / (i2 - i1 +1);  
+
             pwrOverflowRate = ( wecPwrGenFx - ( (wec.batteryCapacity - wec.battery)/(dt*wec.n_battery) + wec.hotelLoad/(wec.n_battery^2) ) ) * energyStorage.n_wecPwrTrnsfr * energyStorage.n_battery;
             totPwrOverflow = pwrOverflowRate * (t_return - simTime);
-
 
             % Account for power dumping
 
@@ -180,7 +172,7 @@ classdef EnergyStorage < handle
             timeIntervals = diff(fleetOpChangeTimes);  % durations between changes in opState
             
             % Track AUV opStates (within intervals between changes in fleet opState)
-
+            
             chargingMatrix = zeros(numel(auvFleet), length(timeIntervals));  
             hotelMatrix = zeros(numel(auvFleet), length(timeIntervals));
             powerDumps = zeros(1, length(timeIntervals));
