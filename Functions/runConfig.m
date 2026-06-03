@@ -1,6 +1,6 @@
 % Ama Hartman
 
-function simResults = runConfiguration(auv, wec, energyStorage, modIn)
+function simResults = runConfig(auv, wec, energyStorage, modIn)
 % runConfiguration compiles and calculates all inputs needed to run the
 % model, calls runPowerModel.m to execute, and compiles outputs into a 
 % struct named 'simResults'.
