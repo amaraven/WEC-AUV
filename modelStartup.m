@@ -1,6 +1,6 @@
 % Ama Hartman
 
-function powerModelStartup
+function modelStartup
     % Add subfolders to path
     addpath('Component Classes');
     addpath('Functions');

@@ -1,8 +1,8 @@
 % Ama Hartman
 
-function simResults = runSimulation(auv, wec, energyStorage, modIn)
-% runSimulation compiles and calculates all inputs needed to run the
-% simulation, calls runPowerModel.m to execute, and compiles outputs into a 
+function simResults = runConfiguration(auv, wec, energyStorage, modIn)
+% runConfiguration compiles and calculates all inputs needed to run the
+% model, calls runPowerModel.m to execute, and compiles outputs into a 
 % struct named 'simResults'.
 %
 % INPUTS: 
@@ -113,7 +113,7 @@ while runFleetCalc == 1
         %   - AUV must dock with at least 20% of its battery left
         %   - Minimize time when central energy storage & AUV are both at full battery
         %   - energyStorage must have enough battery to charge AUV(s) when they return
-        [simResults.energyStorageBatteryLvl, simResults.wecBatteryLvl, simResults.auvBatteryLvl, simResults.auvSchedule] = runPowerModel(modIn.simTime, wec, auvFleet, energyStorage, modIn.incorpStagger);
+        [simResults.energyStorageBatteryLvl, simResults.wecBatteryLvl, simResults.auvBatteryLvl, simResults.auvSchedule] = simulateSystemOps(modIn.simTime, wec, auvFleet, energyStorage, modIn.incorpStagger);
        
         %% Post-Simulation Calcs
 
