@@ -9,9 +9,10 @@
 *slx.original
 # Ignore local scratch file
 scratch.m
-# Ignore outputData file and contents
+# Ignore outputData contents
 **/outputData/*
-outputData/
+!outputData/.gitkeep
+
 
 ----------
 

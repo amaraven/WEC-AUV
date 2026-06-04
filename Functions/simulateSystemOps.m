@@ -65,7 +65,9 @@ for i = 1:length(simTime)
     if wecBatteryLvl(i+1) < wec.lowBatteryLvl
         warning('Low WEC battery. Need to implement WEC energy draw from central storage.')
     end
+    
 
+    %% Extract current operational states for calculations
     auvOpStates = [auvFleet.opState];
     auvOpStates = auvOpStates(1:2:end);  % save only current operational state
 
