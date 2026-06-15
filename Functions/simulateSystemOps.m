@@ -87,7 +87,7 @@ for i = 1:length(simTime)
     end
 
     % Save current battery level in energy storage object (for battery estimation calcs)
-    energyStorage.battery = eStorageBatteryLvl(i);  
+    energyStorage.battery = eStorageBatteryLvl(i+1);  
 
     
     %% AUV Battery
@@ -101,72 +101,75 @@ for i = 1:length(simTime)
     %% AUV Operational State
     % Evaluate opState of AUV(s) & change as applicable for next timestep
 
-    
-    % If central storage goes into battery-save mode, stop charging AUV(s)
-    if eStorageLowBatteryFlag == 1
-        indxCharging = find(auvOpStates == 2);
-        if any(indxCharging)
-            for k = 1:length(indxCharging)
-                auvFleet(indxCharging(k)).changeOpState(3, simTime(i));
-            end
-        end
-
-    else  % start charging auv's docked and still below max battery
-        indxNeedCharge = find(logical( (auvOpStates == 3) .* (auvBatteryLvl(i,:) < [auvFleet.batteryCapacity]) ));   
-        if any(indxNeedCharge)
-            for l = 1:length(indxNeedCharge)
-                auvFleet(indxNeedCharge(l)).changeOpState(2, simTime(i));
-            end
-        end
-
-    end
-
-    % Deployed AUV completes mission & returns
-    onMissionLogic = (auvOpStates == 1);
-    indxMissionComplete = find(logical( onMissionLogic .* ([auvFleet.opTimeComplete] <= simTime(i)) ));
-    if any(indxMissionComplete)
-        for m = 1:length(indxMissionComplete)
-            auvFleet(indxMissionComplete(m)).changeOpState(2, simTime(i));
-        end
-    end
-
-    % Charging AUV finishes charging: 
-    indxChargingComplete = find(logical( (auvOpStates == 2) .* ([auvFleet.opTimeComplete] <= simTime(i)) ));
-    if any(indxChargingComplete)
-        for n = 1:length(indxChargingComplete)
-            auvFleet(indxChargingComplete(n)).changeOpState(3, simTime(i));
-        end
-    end
-
-    % For docked AUV to leave: 
-    % - AUV must have enough battery for the mission
-    % - Central battery must have enough power to fully recharge AUV when it returns
-    % tempMissionBattUsed = arrayfun(@(auv) auv.missionSpecs(auv.mission, 3), auvFleet);
-    tempMissionBattUsed = zeros(1, length(auvFleet));
-    for o = 1:length(auvFleet)
-        tempMissionBattUsed(o) = auvFleet(o).missionSpecs(auvFleet(o).mission, 3); 
-    end
-    auvReadyToDeploy = (auvOpStates ~= 1) .* (auvBatteryLvl(i,:) >= (([auvFleet.rechargeThreshold] + tempMissionBattUsed) .* [auvFleet.batteryCapacity]) ); % cellfun(@(auv) (auv.rechargeThreshold + auv.missionSpecs(auv.mission, 3)) * auv.batteryCapacity, auvFleet) );  
-    if any(auvReadyToDeploy ~= 0) && (simTime(i) > simTimeLastDeployment+staggerHours)
-    % if any(auvReadyToDeploy ~= 0) 
-        nonzroindx = find(auvReadyToDeploy); 
-        auvToDeploy = nonzroindx(1);  % Deploy first AUV available
-
-        [eStorageFutureBattery, eStorageNoBatteryFlag] = energyStorage.estBattery(auvFleet, simTime(i), dt, auvToDeploy, wec);
-            
-        % If estimated battery is above 0, and the central battery is not expected to drop below 0, send auv on mission
-        if (eStorageFutureBattery > 0) && (eStorageNoBatteryFlag == 0) 
-            auvFleet(auvToDeploy).changeOpState(1, simTime(i)); 
-            simTimeLastDeployment = simTime(i);
-            
-        end
-    end
-
     % Save current timestep operational states (calculated at the end of
     % last timestep)
     for p = 1:length(auvFleet)
         auvSchedule(i, p) = auvFleet(p).opState(1); 
     end
+
+    if i < length(simTime)
+    
+        % If central storage goes into battery-save mode, stop charging AUV(s)
+        if eStorageLowBatteryFlag == 1
+            indxCharging = find(auvOpStates == 2);
+            if any(indxCharging)
+                for k = 1:length(indxCharging)
+                    auvFleet(indxCharging(k)).changeOpState(3, simTime(i+1));
+                end
+            end
+    
+        else  % start charging auv's docked and still below max battery
+            indxNeedCharge = find(logical( (auvOpStates == 3) .* (auvBatteryLvl(i,:) < [auvFleet.batteryCapacity]) ));   
+            if any(indxNeedCharge)
+                for l = 1:length(indxNeedCharge)
+                    auvFleet(indxNeedCharge(l)).changeOpState(2, simTime(i+1));
+                end
+            end
+    
+        end
+    
+        % Deployed AUV completes mission & returns
+        onMissionLogic = (auvOpStates == 1);
+        indxMissionComplete = find(logical( onMissionLogic .* ([auvFleet.opTimeComplete] <= simTime(i+1)) ));
+        if any(indxMissionComplete)
+            for m = 1:length(indxMissionComplete)
+                auvFleet(indxMissionComplete(m)).changeOpState(2, simTime(i+1));
+            end
+        end
+    
+        % Charging AUV finishes charging: 
+        indxChargingComplete = find(logical( (auvOpStates == 2) .* ([auvFleet.opTimeComplete] <= simTime(i+1)) ));
+        if any(indxChargingComplete)
+            for n = 1:length(indxChargingComplete)
+                auvFleet(indxChargingComplete(n)).changeOpState(3, simTime(i+1));
+            end
+        end
+    
+        % For docked AUV to leave: 
+        % - AUV must have enough battery for the mission
+        % - Central battery must have enough power to fully recharge AUV when it returns
+        % tempMissionBattUsed = arrayfun(@(auv) auv.missionSpecs(auv.mission, 3), auvFleet);
+        tempMissionBattUsed = zeros(1, length(auvFleet));
+        for o = 1:length(auvFleet)
+            tempMissionBattUsed(o) = auvFleet(o).missionSpecs(auvFleet(o).mission, 3); 
+        end
+        auvReadyToDeploy = (auvOpStates ~= 1) .* (auvBatteryLvl(i,:) >= (([auvFleet.rechargeThreshold] + tempMissionBattUsed) .* [auvFleet.batteryCapacity]) ); % cellfun(@(auv) (auv.rechargeThreshold + auv.missionSpecs(auv.mission, 3)) * auv.batteryCapacity, auvFleet) );  
+        if any(auvReadyToDeploy ~= 0) && (simTime(i+1) > simTimeLastDeployment+staggerHours)
+        % if any(auvReadyToDeploy ~= 0) 
+            nonzroindx = find(auvReadyToDeploy); 
+            auvToDeploy = nonzroindx(1);  % Deploy first AUV available
+    
+            [eStorageFutureBattery, eStorageNoBatteryFlag] = energyStorage.estBattery(auvFleet, simTime(i+1), dt, auvToDeploy, wec);
+                
+            % If estimated battery is above 0, and the central battery is not expected to drop below 0, send auv on mission
+            if (eStorageFutureBattery > 0) && (eStorageNoBatteryFlag == 0) 
+                auvFleet(auvToDeploy).changeOpState(1, simTime(i+1)); 
+                simTimeLastDeployment = simTime(i+1);
+                
+            end
+        end
+    end
+
 
 end  % timesteps
 
