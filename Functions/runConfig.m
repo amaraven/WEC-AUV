@@ -72,7 +72,7 @@ while runFleetCalc == 1
     %% Calculate minimum central battery, for battery to not limit fleet
     % Need at least enough energy saved in central battery to fully
     % recharge AUV(s), and support AUV & WEC hotel loads during
-    % that time given poor power generation +~ 10% for safety.
+    % that time given poor power generation +~ 5% for safety.
     
     wec.calcLowPower(modIn.resourceDataType, modIn.dt, auv); 
 
@@ -135,7 +135,7 @@ while runFleetCalc == 1
 
         end
 
-        %% Simulation Quality Checks
+        %% Simulation Quality Checks (fleet size & central battery level)
         
         % if last auv only went on one mission, and first auv went on more, OR central battery dropped below 0 (even with battery saver) auvFleet is too large by at least 1
         if ( (simResults.auvTimeOnMission(1,end) - (auvFleet(end).chargeTime(auvFleet(end).mission) + auvFleet(end).missionSpecs(auvFleet(end).mission, 2)) ) <= 0 ) && ((simResults.auvTimeOnMission(1,1) - (auvFleet(1).chargeTime(auvFleet(1).mission) + auvFleet(1).missionSpecs(auvFleet(1).mission, 2)) ) > 0 ) || any(simResults.energyStorageBatteryLvl < 0)

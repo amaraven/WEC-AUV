@@ -243,7 +243,7 @@ classdef WEC < handle
                 % end
                 if dataDt ~= simDt
                     % resample to match simulation timestep
-                    wec.powerGenMeans = interp1((dataTimeWindowed-dataDt), wecPowerGenWindowed, simTime);
+                    wec.powerGenMeans = interp1((dataTimeWindowed-dataDt), wecPowerGenWindowed, simTime, 'linear', wecPowerGenWindowed(1));
                 else
                     % no resampling needed
                     wec.powerGenMeans = wecPowerGenWindowed;

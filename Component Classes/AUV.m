@@ -174,14 +174,15 @@ classdef AUV < handle
 
                     end
 
-                case 3  % AUV battery full or WEC in low power mode, WEC recharging itself while supporting auv hotel needs
-                    newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;  % Drawing enough from WEC to stay at full charge 
+                case 3  % AUV battery full or central battery in low power mode (recharging itself while supporting auv hotel needs)
+                    newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;  % Drawing enough from central battery to supply hotel load 
 
                 otherwise
                     error("Unknown AUV operational state.")
             
             end  % operational cases
             
+            % Update AUV object properties
             auv.batteryTime = simTime; 
             if abs(newBatteryDraw - auv.wecBatteryDraw) > 0.01
                 auv.wecBatteryDraw = newBatteryDraw; 

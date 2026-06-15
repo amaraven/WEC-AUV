@@ -48,7 +48,7 @@ for i = 1:length(simTime)
     % Calculate WEC battery level for next iteration & amount of power
     % generated for central battery storage
 
-    wecBatteryLvl(i+1) = min(wecBatteryLvl(i) + (-wec.hotelLoad/wec.n_battery + wec.powerGenMeans(i)*wec.n_battery)*dt, wec.batteryCapacity);
+    wecBatteryLvl(i+1) = min(wecBatteryLvl(i) + (-wec.hotelLoad/(wec.n_battery^2) + wec.powerGenMeans(i)*wec.n_battery)*dt, wec.batteryCapacity);
     wec.battery = wecBatteryLvl(i);  % Could maybe phase out
 
     pGenToWEC = ((wec.batteryCapacity - wecBatteryLvl(i)) / (dt * wec.n_battery)) + (wec.hotelLoad/(wec.n_battery^2));
@@ -65,7 +65,7 @@ for i = 1:length(simTime)
     if wecBatteryLvl(i+1) < wec.lowBatteryLvl
         warning('Low WEC battery. Need to implement WEC energy draw from central storage.')
     end
-    
+
 
     %% Extract current operational states for calculations
     auvOpStates = [auvFleet.opState];
@@ -99,7 +99,8 @@ for i = 1:length(simTime)
     
 
     %% AUV Operational State
-    % Evaluate opState of AUV(s) & change as applicable
+    % Evaluate opState of AUV(s) & change as applicable for next timestep
+
     
     % If central storage goes into battery-save mode, stop charging AUV(s)
     if eStorageLowBatteryFlag == 1
@@ -161,7 +162,8 @@ for i = 1:length(simTime)
         end
     end
 
-    % Save timestep operational states
+    % Save current timestep operational states (calculated at the end of
+    % last timestep)
     for p = 1:length(auvFleet)
         auvSchedule(i, p) = auvFleet(p).opState(1); 
     end
