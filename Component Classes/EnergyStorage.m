@@ -123,7 +123,7 @@ classdef EnergyStorage < handle
                 auv_n_battery(auvNum) = auv.n_battery; 
                 auvOpState(auvNum) = auv.opState(1);
                 auvOpTimeComplete(auvNum) = auv.opTimeComplete;
-                auvMissionTime(auvNum) = auv.missionSpecs(auv.mission, 2); 
+                auvMissionTime(auvNum) = auv.missionTime; 
                 auvChargeTime(auvNum) = auv.chargeTime;
             end  
 
@@ -131,7 +131,7 @@ classdef EnergyStorage < handle
             adjustedRechargeRate = auvChargeRate / 1.2;  % Simplified from: maxB / ( (0.8*maxB / chargeRate) + (0.4*maxB / chargeRate) ) = chargeRate / 1.2
            
             % Calculate time auv auvToDeploy will complete charging after return from mission
-            t_return = simTime + auvFleet(auvToDeploy).missionSpecs(auvFleet(auvToDeploy).mission, 2) + auvFleet(auvToDeploy).chargeTime(auvFleet(auvToDeploy).mission); 
+            t_return = simTime + auvFleet(auvToDeploy).missionTime + auvFleet(auvToDeploy).chargeTime; 
 
             % Power draw rates[W]
             hotelDrawRate = auvHotelLoad ./ auv_n_powerTransfer ./ auv_n_battery; 

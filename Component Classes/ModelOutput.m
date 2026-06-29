@@ -15,8 +15,8 @@ classdef ModelOutput < handle
         dataIn              % Input data specifics
         centralBatteryCapacity (1,:) {mustBeNumeric}  % Vector containing total energy storage of central battery for each simulation [Wh]
         fleetSize (1,:) {mustBeNumeric}  % (1xm) Array with number of AUVs in fleet for each test case
-        auvMissionLength (1,:) {mustBeNumeric}  % [hr] Could be 1x1 or 1xm depending on if mission length changes between test cases
-        ratePwrUsed (1,:) {mustBeNumeric}  % [W] Rate AUV uses power (power used during mission + recharge [Wh] / mission + recharge time [h])
+        % auvMissionLength (1,:) {mustBeNumeric}  % [hr] Could be 1x1 or 1xm depending on if mission length changes between test cases
+        % ratePwrUsed (1,:) {mustBeNumeric}  % [W] Rate AUV uses power (power used during mission + recharge [Wh] / mission + recharge time [h])
         energyStorageBatteryLvl {mustBeNumeric} % [Wh] Battery level of central energy storage as a function of time with rows corresponding to time steps and columns corresponding to test cases
         wecBatteryLvl {mustBeNumeric}  % [Wh] Battery level of WEC as a function of time with rows corresponding to time steps and columns corresponding to test cases
         auvBatteryLvl (1,:) cell  % [Wh] Battery level of AUV(s) as a function of time. Cell array with columns corresponding to test case. Each array item is a nxm matrix with n = timesteps and m = auv number
@@ -24,6 +24,7 @@ classdef ModelOutput < handle
         auvTimeOnMission (1,:) cell  % [h] Time each AUV spends 'on-mission' during the simulation. Cell array with columns corresponding to test case. Each array item is a 1xm matrix with m corresponding to the number of AUVs in fleet.
         auvTimeOnMissionCorrected (1,:) cell  % [h] Time each AUV spends 'on-mission' after all AUVs are deployed in the case of a staggered deployment. Empty if deployment stagger not incorporated. Used for performance calculations using an adjusted domain to exclude time when AUVs are artificially held at dock
         auvFleet (1,:) cell  % Cell array containing auv fleet for each test case
+        numWECs (1, 1) {mustBeNumeric} = 1  % Number of WECs needed to support AUV fleet, default is 1
     end
     
     
@@ -230,11 +231,11 @@ classdef ModelOutput < handle
                     % Can delete later on...
                     if isempty(modOut.auvFleet{1,i}(1,1).chargeTime)
                         rateLinPowerTransfer = modOut.auvFleet{1,i}(1,1).chargeRate;  % Rate of power transfer in linear region
-                        modOut.auvFleet{1,i}(1,1).chargeTime = ( 0.8-(1-modOut.auvFleet{1,i}(1,1).missionSpecs(:,3)) )*modOut.auvFleet{1,i}(1,1).batteryCapacity/rateLinPowerTransfer  + 0.4*modOut.auvFleet{1,i}(1,1).batteryCapacity./rateLinPowerTransfer;  % Time to charge up to 80% + time to charge from 80% to 100% 
+                        modOut.auvFleet{1,i}(1,1).chargeTime = ( 0.8-(1-modOut.auvFleet{1,i}(1,1).missionBattPrcnt) )*modOut.auvFleet{1,i}(1,1).batteryCapacity/rateLinPowerTransfer  + 0.4*modOut.auvFleet{1,i}(1,1).batteryCapacity./rateLinPowerTransfer;  % Time to charge up to 80% + time to charge from 80% to 100% 
                     end
     
                     if ~isempty(modOut.auvFleet{1,i})
-                        t_m = modOut.auvFleet{1,i}(1,1).missionSpecs(2);  % mission time
+                        t_m = modOut.auvFleet{1,i}(1,1).missionTime;  % 
                         t_r = modOut.auvFleet{1,i}(1,1).chargeTime;  % recharge time
                         t_c(i) = t_m+t_r;  % cycle time
                     else

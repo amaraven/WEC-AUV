@@ -87,7 +87,10 @@ classdef WEC < handle
         function calcLowPower(wec, resourceDataType, dt, auv)
             switch resourceDataType
                 case{1, 2, 4, 6}
-                    chargeWindow = ceil(auv.chargeTime(auv.mission)/dt);
+                    chargeWindow = ceil([auv.chargeTime]./dt);
+                    if numel(chargeWindow) > 1
+                        chargeWindow = mean(chargeWindow);
+                    end
                     tmpPwrGen = movmean(wec.powerGenMeans, chargeWindow);
                     wec.lowPowerGen = min(tmpPwrGen(floor(0.5*chargeWindow) : end - floor(0.5*chargeWindow)) );  % Exclude truncated means
                     
@@ -249,7 +252,7 @@ classdef WEC < handle
                     wec.powerGenMeans = wecPowerGenWindowed;
                 end
 
-                % Save final power gen. vector
+                % Save mean value
                 wec.meanPowerGen = mean(wec.powerGenMeans); 
 
                 % wec.cumPwrGen = [0; cumsum(wec.powerGenMeans)];

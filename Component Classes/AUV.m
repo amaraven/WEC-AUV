@@ -18,8 +18,10 @@ classdef AUV < handle
         % User-Defined
         model           % Model of auv (i.e. 'Iver3')
         mass            % [kg] Mass of auv 
-        mission         % Mission number currently using / running
-        missionSpecs    % Column-vector matrix containing mission number (1,2..), time to complete [hr], and percentage of battery used (0.XX)
+        % mission         % Mission number currently using / running
+        % missionSpecs    % (1) time to complete [hr], and (2) percentage of battery used (0.XX)
+        missionTime     % [hr] time to complete mission
+        missionBattPrcnt % [0.XX] Percentage of battery used during mission
         batteryCapacity % [Wh] Total energy storage onboard 
         chargeRate      % [W] Rate of battery charge 
         chargeMethod    % Wired (1) or Wireless (0) charging
@@ -67,7 +69,9 @@ classdef AUV < handle
             auv.model = model;
             auv.mass = mass; 
             auv.batteryCapacity = batteryCapacity;
-            auv.missionSpecs = [1, missionTime, missionBatteryUsed]; 
+            % auv.missionSpecs = [1, missionTime, missionBatteryUsed]; 
+            auv.missionTime = missionTime;
+            auv.missionBattPrcnt = missionBatteryUsed; 
             auv.hotelLoad = hotelLoad; 
             auv.chargeRate = chargeRate;
             auv.chargeMethod = chargeMethod;
@@ -75,18 +79,19 @@ classdef AUV < handle
             auv.n_battery = n_battery;
             auv.n_powerTransfer = n_powerTransfer;
 
-            auv.mission = 1;  % Current AUVs only have one mission option, so always will be running 'mission 1'
+            % auv.mission = 1;  % Current AUVs only have one mission option, so always will be running 'mission 1'
 
             % Dependent Constants
             rateLinPowerTransfer = auv.chargeRate;  % Rate of power transfer in linear region
-            auv.chargeTime = ( 0.8-(1-auv.missionSpecs(:,3)) )*auv.batteryCapacity/rateLinPowerTransfer  + 0.4*auv.batteryCapacity./rateLinPowerTransfer;  % Time to charge up to 80% + time to charge from 80% to 100% 
-            auv.chargeLoad = (auv.batteryCapacity*auv.missionSpecs(:, 3) + auv.hotelLoad*auv.chargeTime) / auv.n_powerTransfer / auv.n_battery;  % Load on WEC battery to charge AUV battery
+            auv.chargeTime = ( 0.8-(1-auv.missionBattPrcnt) )*auv.batteryCapacity/rateLinPowerTransfer  + 0.4*auv.batteryCapacity./rateLinPowerTransfer;  % Time to charge up to 80% + time to charge from 80% to 100% 
+            auv.chargeLoad = (auv.batteryCapacity*auv.missionBattPrcnt + auv.hotelLoad*auv.chargeTime) / auv.n_powerTransfer / auv.n_battery;  % Load on WEC battery to charge AUV battery
 
             % Initialize battery levels & operational state
             auv.opState = [3, 0];  % AUV initialized to be docked with a full battery at time t = 0
             auv.battery = [auv.batteryCapacity; auv.batteryCapacity];  % Current & previous battery states initialized as full
             auv.wecBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;  % Drawing enough from WEC to stay at full charge
             auv.opTimeComplete = NaN; 
+            auv.batteryTime = 0;
 
         end  % constructor function
 
@@ -124,7 +129,7 @@ classdef AUV < handle
 
             switch auv.opState(1)
                 case 1  % AUV executing mission
-                    ratePowerUse = auv.missionSpecs(auv.mission, 3)*auv.batteryCapacity / auv.missionSpecs(auv.mission, 2);  % rate = Battery Wh used / time to use energy
+                    ratePowerUse = auv.missionBattPrcnt*auv.batteryCapacity / auv.missionTime;  % rate = Battery Wh used / time to use energy
                     auv.battery(2) = auv.battery(1) - ratePowerUse*stateTime;
 
                     newBatteryDraw = 0; 
@@ -215,7 +220,7 @@ classdef AUV < handle
 
             switch auv.opState(1)
                 case 1  % on mission
-                    auv.opTimeComplete = simTime + auv.missionSpecs(auv.mission, 2); 
+                    auv.opTimeComplete = simTime + auv.missionTime; 
                 
                 case 2  % recharging
                     if auv.battery(2) < 0.8*auv.batteryCapacity

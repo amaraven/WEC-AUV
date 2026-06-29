@@ -34,7 +34,8 @@ auvSchedule = zeros(length(simTime), length(auvFleet));
 
 % Initialize AUV deployment stagger values
 if incorpStagger == 1
-    staggerHours = (auvFleet(1).missionSpecs(2)+auvFleet(1).chargeTime) /length(auvFleet);  % Proportional stagger yileds even breaks in deployment 
+    % staggerHours = (auvFleet(1).missionTime+auvFleet(1).chargeTime) /length(auvFleet);  % Proportional stagger yileds even breaks in deployment 
+    staggerHours = mean( ([auvFleet.missionTime]+[auvFleet.chargeTime]) ./ length(auvFleet) );
     simTimeLastDeployment = -staggerHours; 
 else
     staggerHours = 0;
@@ -69,7 +70,7 @@ for i = 1:length(simTime)
 
     %% Extract current operational states for calculations
     auvOpStates = [auvFleet.opState];
-    auvOpStates = auvOpStates(1:2:end);  % save only current operational state
+    auvOpStates = auvOpStates(1:2:end);  % collect current operational state, not time associated with it
 
     
     %% Central storage battery
@@ -148,12 +149,12 @@ for i = 1:length(simTime)
         % For docked AUV to leave: 
         % - AUV must have enough battery for the mission
         % - Central battery must have enough power to fully recharge AUV when it returns
-        % tempMissionBattUsed = arrayfun(@(auv) auv.missionSpecs(auv.mission, 3), auvFleet);
+        % tempMissionBattUsed = arrayfun(@(auv) auv.missionBattPrcnt, auvFleet);
         tempMissionBattUsed = zeros(1, length(auvFleet));
         for o = 1:length(auvFleet)
-            tempMissionBattUsed(o) = auvFleet(o).missionSpecs(auvFleet(o).mission, 3); 
+            tempMissionBattUsed(o) = auvFleet(o).missionBattPrcnt; 
         end
-        auvReadyToDeploy = (auvOpStates ~= 1) .* (auvBatteryLvl(i,:) >= (([auvFleet.rechargeThreshold] + tempMissionBattUsed) .* [auvFleet.batteryCapacity]) ); % cellfun(@(auv) (auv.rechargeThreshold + auv.missionSpecs(auv.mission, 3)) * auv.batteryCapacity, auvFleet) );  
+        auvReadyToDeploy = (auvOpStates ~= 1) .* (auvBatteryLvl(i,:) >= (([auvFleet.rechargeThreshold] + tempMissionBattUsed) .* [auvFleet.batteryCapacity]) ); % cellfun(@(auv) (auv.rechargeThreshold + auv.missionBattPrcnt) * auv.batteryCapacity, auvFleet) );  
         if any(auvReadyToDeploy ~= 0) && (simTime(i+1) > simTimeLastDeployment+staggerHours)
         % if any(auvReadyToDeploy ~= 0) 
             nonzroindx = find(auvReadyToDeploy); 

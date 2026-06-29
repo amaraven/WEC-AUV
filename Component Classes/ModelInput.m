@@ -30,9 +30,10 @@ classdef ModelInput < handle
 
     % User-defined properties
     properties (GetAccess = public, SetAccess = private)
+        simGoal (1,1) {mustBeMember(simGoal, [1,2])} = 1  % 1: Input power generation, output AUV fleet size. 2: Input AUV fleet, output power required
         simHrs (1,1) {mustBePositive} = (7*24)  % default: 1 wk
-        depVar (1,1) string {mustBeMember(depVar, ["AUV Model", "WEC Power Gen. / Wave Resource"])} = "AUV Model"  % default: compare AUV models
-        resourceDataType (1,1) {mustBeMember(resourceDataType, [1,2,3,4,5,6])} = 4  % default: 4 (time series of wave specs)
+        depVar (1,1) string {mustBeMember(depVar, ["AUV Model", "WEC Power Gen. / Wave Resource", "N/A"])} = "AUV Model"  % default: compare AUV models
+        resourceDataType (1,1) {mustBeMember(resourceDataType, [0,1,2,3,4,5,6])} = 4  % default: 4 (time series of wave specs)
         resourceDataVars struct = struct()  % Struct containing resource data information and variables
         incorpStagger (1,1) {mustBeMember(incorpStagger, [1,0])} = 1  % default: 1 (yes incorporate stagger into AUV mission scheduling)
         maxFleetSize {mustBeNonnegative} = 0  % default: 0 (no max fleet size)
@@ -52,11 +53,12 @@ classdef ModelInput < handle
     %% Instance Methods (need object as an input)
     methods
         %% Constructor
-        function mi = ModelInput(simHrs, depVar, resourceDataType, incorpStagger, maxFleetSize, userDefinedBattery, dtSec, auvModels, resourceDataVariables, outputPlotSelection)
+        function mi = ModelInput(simGoal, simHrs, depVar, resourceDataType, incorpStagger, maxFleetSize, userDefinedBattery, dtSec, auvModels, resourceDataVariables, outputPlotSelection)
             arguments
+                simGoal (1,1) {mustBeMember(simGoal, [1,2])} = 1  % default: Input power information, output AUV fleet size
                 simHrs (1,1) {mustBePositive} = (7*24)  % default: 1 wk
-                depVar (1,1) string {mustBeMember(depVar, ["AUV Model", "WEC Power Gen. / Wave Resource"])} = "AUV Model"  % default: compare AUV models
-                resourceDataType (1,1) {mustBeMember(resourceDataType, [1,2,3,4,5,6])} = 4  % default: 4 (time series of wave specs)
+                depVar (1,1) string {mustBeMember(depVar, ["AUV Model", "WEC Power Gen. / Wave Resource", "N/A"])} = "AUV Model"  % default: compare AUV models
+                resourceDataType (1,1) {mustBeMember(resourceDataType, [0,1,2,3,4,5,6])} = 4  % default: 4 (time series of wave specs)
                 incorpStagger (1,1) {mustBeMember(incorpStagger, [1,0])} = 1  % default: 1 (yes incorporate stagger)
                 maxFleetSize {mustBeNonnegative} = 0  % default: 0 (no max fleet size)
                 userDefinedBattery {mustBeNonnegative} = 0  % default: 0 (no user-defined battery)
@@ -74,6 +76,7 @@ classdef ModelInput < handle
                 userDefinedBattery = 0;
             end
 
+            mi.simGoal = simGoal; 
             mi.simHrs = simHrs;
             mi.depVar = depVar;
             mi.resourceDataType = resourceDataType; 
@@ -98,6 +101,17 @@ classdef ModelInput < handle
         end
 
 
+        %% Set resource data variable 
+        function addResourceDataVar(mi, newVarName, newVarValue)
+            % Adds newVar to resourceDataVars struct
+            % 
+            % Inputs: 
+            % * newVarName: string name of field to add
+            % * newVarValue: value to assign to the new field
+
+            mi.resourceDataVars.(newVarName) = newVarValue;
+        end
+        
         %% Load Resource Data, convert to powerGen time series
         function calcPowerGen(mi, wec, modOut, depVarCount)
             % From user-input data, calculates power generation vector and
@@ -115,8 +129,8 @@ classdef ModelInput < handle
             end
 
             % Calculate and save power gen
-            switch mi.resourceDataType
-                case 1 % Proteus struct containing power generated during different sea states
+            switch mi.resourceDataType                
+                case 1  % Proteus struct containing power generated during different sea states
                     % load data
                     load('inputData/RM3_seaState_Power.mat', 'RM3');  % Time series output of proteus WEC model for a single point absorber with no dock attached.
                     
@@ -135,7 +149,7 @@ classdef ModelInput < handle
                     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;  % save power gen
                     modOut.dataIn.seaState(depVarCount) = seaState;  % save sea state
 
-                case 2 % Time series of power gen
+                case 2  % Time series of power gen
                     % load data
                     dataTime = load(mi.resourceDataVars.dataFiles{depVarCount}, mi.resourceDataVars.tVarName);
                     pGen_dataTime = load(mi.resourceDataVars.dataFiles{depVarCount}, mi.resourceDataVars.pwrVarName);
@@ -146,10 +160,17 @@ classdef ModelInput < handle
                     % save
                     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
 
-                case 3  % Value of mean power
+                case {0, 3}  % Value of mean power, calculated (0) or given (3)
+                    switch mi.simGoal
+                        case 1
+                            meanPwr = mi.resourceDataVars.meanPower;
+                        case 2
+                            meanPwr = mi.resourceDataVars.minPowerRequired;
+                    end
+
                     % save
                     if isempty(modOut.meanPowerGen)
-                        modOut.meanPowerGen = mi.resourceDataVars.meanPower;
+                        modOut.meanPowerGen = meanPwr;
                     end
     
                     % save for use in current sim. iteration
@@ -185,6 +206,10 @@ classdef ModelInput < handle
                     % wec.calcPowerGen(mi.resourceDataVars.dataTable,'meanPwr', mi.simTime, 0, 403); %% set windowOverrideIndx to 403 (and use Oregon dataset) to replicate paper results, otherwise set to 0  
                     wec.calcPowerGen(waveData,'meanPwr', mi.simTime, 0, 403); %% set windowOverrideIndx to 403 (and use Oregon dataset) to replicate paper results, otherwise set to 0  
 
+                    % If input is AUV fleet, compare required power with
+                    % power generated and increase number of WECs if needed
+                    mi.sizeWECFleet(wec, modOut);
+
                     % save
                     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
 
@@ -195,10 +220,14 @@ classdef ModelInput < handle
                     % calculate
                     % wec.calcPowerGen(mi.resourceDataVars.waveSpecTable(depVarCount,:), [], mi.simTime, 0, 0);
                     wec.calcPowerGen(waveData, [], mi.simTime, 0, 0);
-                    wec.lowPowerGen = 0.75*wec.meanPowerGen; 
-                    wec.powerGenMeans = ones(size(mi.simTime)) * wec.meanPowerGen;
 
-                    % save
+                    % If input is AUV fleet, compare required power with
+                    % power generated and increase number of WECs if needed
+                    mi.sizeWECFleet(wec, modOut);
+
+                    % save values
+                    wec.lowPowerGen = 0.75*wec.meanPowerGen; 
+                    % wec.powerGenMeans = ones(size(mi.simTime)) * wec.meanPowerGen;  % REDUNDANT - already done in WEC.calcPowerGen
                     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
 
                 case 6 % Power matrix & Hs, Te time series
@@ -217,5 +246,22 @@ classdef ModelInput < handle
                     modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
             end
         end  % calc power gen fn
+
+        function sizeWECFleet(mi, wec, modOut)
+            % Given the power required to support a specific AUV fleet
+            % (mi.resourceDataVars.minPowerRequired), determines the number
+            % of WECs needed based on calculated WEC power generation
+            % (wec.powerGenMeans)
+
+            % If input is AUV fleet, compare required power with
+            % power generated and increase number of WECs if needed
+            if mi.simGoal == 2
+                modOut.numWECs = ceil(mi.resourceDataVars.minPowerRequired/wec.meanPowerGen);  % Number of WECs needed to support given AUV fleet
+                wec.powerGenMeans = wec.powerGenMeans * modOut.numWECs;  % Multiply power gen. from single WEC by # required
+                wec.meanPowerGen = mean(wec.powerGenMeans);
+            end
+
+        end
+
     end  % methods
 end

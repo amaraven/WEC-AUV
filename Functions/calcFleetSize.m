@@ -22,7 +22,7 @@ powerValue = wec.meanPowerGen - wec.hotelLoad/(wec.n_battery^2);
 maxHotelFleet = floor((powerValue*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr - energyStorage.baseHotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr) / (auv.hotelLoad / energyStorage.n_battery / auv.n_battery / auv.n_powerTransfer + energyStorage.dockHotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr));  % PowerGen - wecHotelLoad - auvHotelLoad*fleetSize > 0    
 
 % Time for an auv to go on mission + recharge + hotel during other auv mssn
-cycleTime = auv.chargeTime(auv.mission) + auv.missionSpecs(auv.mission,2);  
+cycleTime = auv.chargeTime + auv.missionTime;  
 
 % If no auv's can be supported on hotel, can not support any auvs
 if maxHotelFleet < 1
