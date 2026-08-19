@@ -12,7 +12,7 @@ classdef ModelOutput < handle
         simTime (:,1) {mustBeNumeric}  % Time series vector used for simulation. Default is 1 week with 30 s timesteps   
         meanPowerGen {mustBeNumeric}  % [W] Mean value of power gen. Default is generic 1.3 kW
         powerGenMeans {mustBeNumeric}  % [W] Time series of power gen throughout simulation
-        dataIn              % Input data specifics
+        % dataIn              % Input data specifics
         centralBatteryCapacity (1,:) {mustBeNumeric}  % Vector containing total energy storage of central battery for each simulation [Wh]
         fleetSize (1,:) {mustBeNumeric}  % (1xm) Array with number of AUVs in fleet for each test case
         % auvMissionLength (1,:) {mustBeNumeric}  % [hr] Could be 1x1 or 1xm depending on if mission length changes between test cases

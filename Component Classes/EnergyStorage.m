@@ -212,7 +212,7 @@ classdef EnergyStorage < handle
 
             end
 
-            totalDraw = sum(sum(chargingMatrix.*(chargingDrawRate').*timeIntervals/energyStorage.n_battery) + sum(hotelMatrix.*(hotelDrawRate').*timeIntervals/energyStorage.n_battery));  % sum of auv draw for each interval - UNDERESTIMATES for any auv not completing their charge
+            totalDraw = sum(sum(chargingMatrix.*(chargingDrawRate').*timeIntervals/energyStorage.n_battery) + sum(hotelMatrix.*(hotelDrawRate').*timeIntervals/energyStorage.n_battery));  % sum of auv draw for each interval - UNDERESTIMATES for any auv not completing their charge, OVERESTIMATES (by 3.3% for any auv completing their charge)
 
             totPwrDump = sum(powerDumps); 
             

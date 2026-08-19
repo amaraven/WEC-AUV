@@ -29,8 +29,12 @@ auvBatteryLvl = zeros(length(simTime), length(auvFleet));
 wecBatteryLvl = zeros(length(simTime)+1, 1); 
 wecBatteryLvl(1) = wec.batteryCapacity;  % Initialized level saved in class file
 eStorageBatteryLvl = zeros(length(simTime)+1, 1);
-eStorageBatteryLvl(1) = energyStorage.batteryCapacity*0.85;  % Initialized level is 85% max
+% eStorageBatteryLvl(1) = energyStorage.batteryCapacity*0.85;  % Initialized level is 85% max
+eStorageBatteryLvl(1) = min(auvFleet(1).chargeLoad*length(auvFleet)/energyStorage.n_battery + auvFleet(1).chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - ( (wec.lowPowerGen-wec.hotelLoad/(wec.n_battery^2))*auvFleet(1).chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr ), energyStorage.batteryCapacity);% *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
 auvSchedule = zeros(length(simTime), length(auvFleet)); 
+
+% Initialize energy storage battery level
+
 
 % Initialize AUV deployment stagger values
 if incorpStagger == 1
@@ -78,7 +82,7 @@ for i = 1:length(simTime)
     % power and opState(s) at current simTime
     
     % If >= 100% charged, dumps extra power and keeps battery at max
-    eStorageBatteryLvl(i+1) = min(eStorageBatteryLvl(i) + (extraPower*energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery + - energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - sum([auvFleet.wecBatteryDraw])/energyStorage.n_battery )*dt, energyStorage.batteryCapacity);  % [prev.battery + (draws & gains)*dt]
+    eStorageBatteryLvl(i+1) =      min(eStorageBatteryLvl(i) + (extraPower*energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery + - energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - sum([auvFleet.wecBatteryDraw])/energyStorage.n_battery )*dt, energyStorage.batteryCapacity);  % [prev.battery + (draws & gains)*dt]
     eStorageLowBatteryFlag = 0;
     
     % If central battery is low, stop charging AUVs but still supply hotel loads

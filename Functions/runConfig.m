@@ -1,6 +1,6 @@
 % Ama Hartman
 
-function simResults = runConfig(auv, wec, energyStorage, modIn)
+function runConfig(auv, wec, energyStorage, modIn, simResults)
 % runConfiguration compiles and calculates all inputs needed to run the
 % model, calls runPowerModel.m to execute, and compiles outputs into a 
 % struct named 'simResults'.
@@ -32,37 +32,54 @@ function simResults = runConfig(auv, wec, energyStorage, modIn)
 %   - meanPowerGen: [W] mean power generation throughout simulation
 %   - powerGenMeans: [W]
 
-% Initialze results struct
-simResults = struct('fleetSize',    0, ...
-    'centralBatteryCapacity',       0, ...
-    'energyStorageBatteryLvl',      [], ...
-    'wecBatteryLvl',                [], ...
-    'auvBatteryLvl',                [], ...
-    'auvSchedule',                  [], ...
-    'auvTimeOnMission',             0, ...
-    'auvTimeOnMissionCorrected',    0, ...
-    'auvFleet',                     [], ...
-    'meanPowerGen',                 0, ...
-    'powerGenMeans',                []);
+% % Initialze results struct
+% simResults = struct('fleetSize',    0, ...
+%     'centralBatteryCapacity',       0, ...
+%     'energyStorageBatteryLvl',      [], ...
+%     'wecBatteryLvl',                [], ...
+%     'auvBatteryLvl',                [], ...
+%     'auvSchedule',                  [], ...
+%     'auvTimeOnMission',             0, ...
+%     'auvTimeOnMissionCorrected',    0, ...
+%     'auvFleet',                     [], ...
+%     'meanPowerGen',                 0, ...
+%     'powerGenMeans',                [], ...
+%     'numWECs',                      0);
 
 
 %% Fleet size calculation
-runFleetCalc = 1;
-fleetCalcCount = 0;
-while runFleetCalc == 1
-    fleetCalcCount = fleetCalcCount + 1;
+reRunSim = 1;
+simAttemptNum = 0;
+while reRunSim == 1
+    simAttemptNum = simAttemptNum + 1;
 
     if modIn.simGoal == 1
-        if fleetCalcCount > 1
+        if simAttemptNum > 1
             simResults.fleetSize = simResults.fleetSize - 1;
     
+            % reset wec & auv timestep parameters
+            wec.reset();
+            arrayfun(@(a) a.reset(), auv); 
+            energyStorage.reset();
         else
             simResults.fleetSize = calcFleetSize(wec, auv, energyStorage, modIn.maxFleetSize);  % initial calculation
         end
 
     else
+        % Set AUV fleet size (given via user-input)
         simResults.fleetSize = numel(auv);
-        runFleetCalc = 0;  % do not re-run simulation with smaller fleet
+
+        % if re-running simulation, use a larger power generation
+        if simAttemptNum > 1
+            newMinPwr = wec.meanPowerGen * 1.10;  % Increase power gen. by 10%
+            modIn.addResourceDataVar('minPowerRequired', newMinPwr);
+            modIn.calcPowerGen(wec, simResults)
+
+            % reset wec & auv timestep parameters
+            wec.reset();
+            arrayfun(@(a) a.reset(), auv); 
+            energyStorage.reset();
+        end
     end
     
     
@@ -73,20 +90,20 @@ while runFleetCalc == 1
     %% Calculate minimum central battery, for battery to not limit fleet
     % Need at least enough energy saved in central battery to fully
     % recharge AUV(s), and support AUV & WEC hotel loads during
-    % that time given poor power generation +~ 5% for safety.
+    % that time given poor power generation +~ 20% for safety.
    
     wec.calcLowPower(modIn.resourceDataType, modIn.dt, auv); 
 
     lowPowerOverflow = wec.lowPowerGen -  wec.hotelLoad/(wec.n_battery^2);  % Assumes wec is already at max battery
     switch modIn.simGoal
         case 1
-            minBattery = ( auv.chargeLoad*simResults.fleetSize/energyStorage.n_battery + auv.chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - lowPowerOverflow*auv.chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  ) *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
+            minBattery = ( auv.chargeLoad*simResults.fleetSize/energyStorage.n_battery + auv.chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - lowPowerOverflow*auv.chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  )/0.8;% *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
         case 2
-            minBattery = ( sum([auv.chargeLoad])/energyStorage.n_battery + mean([auv.chargeTime])*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - lowPowerOverflow*mean([auv.chargeTime])*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  ) *1.05; 
+            minBattery = ( sum([auv.chargeLoad])/energyStorage.n_battery + mean([auv.chargeTime])*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - lowPowerOverflow*mean([auv.chargeTime])*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  )/0.8;% *1.05; 
     end
 
     if minBattery < 0  % Somewhat arbituary minimum battery if pGen > operating loads
-        warning('Problem with minimum battery calculation. Using default value for this simulation.')
+        warning('Power generation outweighs maximum expected operational loads for this system, using a default central battery capacity for this simulation.')
         switch modIn.simGoal
             case 1
                 minBattery = 0.25 * ( auv.chargeLoad*simResults.fleetSize/energyStorage.n_battery + auv.chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr ); 
@@ -113,6 +130,9 @@ while runFleetCalc == 1
 
     end
 
+    % Modify central battery
+    % energyStorage.batteryCapacity = energyStorage.batteryCapacity*1.75;
+
 
     % Build fleet & run model if possible
     if simResults.fleetSize > 0
@@ -120,7 +140,7 @@ while runFleetCalc == 1
         % Build fleet
         switch modIn.simGoal
             case 1
-                auvFleet = arrayfun(@(x) AUV(auv.model, auv.mass, auv.batteryCapacity, auv.missionTime, auv.missionBattPrcnt, auv.hotelLoad, auv.chargeRate, auv.chargeMethod, auv.rechargeThreshold, auv.n_battery, auv.n_powerTransfer), 1:simResults.fleetSize);  
+                auvFleet = arrayfun(@(~) AUV(auv.model, auv.mass, auv.batteryCapacity, auv.missionTime, auv.missionBattPrcnt, auv.hotelLoad, auv.chargeRate, auv.chargeMethod, auv.rechargeThreshold, auv.n_battery, auv.n_powerTransfer), 1:simResults.fleetSize);  
             case 2
                 auvFleet = auv;  % (user-input AUV fleet saved in app.auv then used as input to runConfig.m)
         end
@@ -163,11 +183,11 @@ while runFleetCalc == 1
             case 1
                 % if last auv only went on one mission, and first auv went on more, OR central battery dropped below 0 (even with battery saver) auvFleet is too large by at least 1
                 if ( (simResults.auvTimeOnMission(1,end) - (auvFleet(end).chargeTime + auvFleet(end).missionTime) ) <= 0 ) && ((simResults.auvTimeOnMission(1,1) - (auvFleet(1).chargeTime + auvFleet(1).missionTime) ) > 0 ) || any(simResults.energyStorageBatteryLvl < 0)
-                    runFleetCalc = 1;  % re-run fleet size calculation. (Disable to plot results for systems with too-many AUVs)  
+                    reRunSim = 1;  % re-run fleet size calculation. (Disable to plot results for systems with too-many AUVs)  
                     warning('Sorry, our initial %s fleet size estimate of %f was too high. Re-running the simulation now...', auv.model, simResults.fleetSize)
             
                 else
-                    runFleetCalc = 0;
+                    reRunSim = 0;
         
                     simResults.centralBatteryCapacity = [energyStorage.batteryCapacity];
                 end 
@@ -177,7 +197,8 @@ while runFleetCalc == 1
                 % went on mission, powerGen insufficient. Run again w/
                 % higher power generation value %%%%%%%%%%%%%%% todo
                 if any(simResults.energyStorageBatteryLvl < 0)
-                    warning('Central battery dropped below zero. Estimated power generation may be insufficient for the given AUV fleet.')
+                    reRunSim = 1;
+                    warning('Central battery dropped below zero. Re-running simulation with a 10% higher minimum power generation.')
                 end
                 simResults.centralBatteryCapacity = [energyStorage.batteryCapacity];
         end
@@ -195,7 +216,7 @@ while runFleetCalc == 1
                 simResults.wecBatteryLvl = zeros(size(modIn.simTime)); 
                 simResults.auvFleet = [];
         
-                runFleetCalc = 0;
+                reRunSim = 0;
         end
     end
 

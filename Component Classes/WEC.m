@@ -83,6 +83,13 @@ classdef WEC < handle
         end
 
         
+        %% Modify hotel load
+        function modifyHotelLoad(wec, newHotelLoad)
+            % re-writes the hotel load of the wec object as the given value
+            wec.hotelLoad = newHotelLoad;
+        end
+
+        
         %% Calculate 'low power' generation threshold
         function calcLowPower(wec, resourceDataType, dt, auv)
             switch resourceDataType

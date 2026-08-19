@@ -7,11 +7,18 @@
 *.rxw64
 *rxm64
 *slx.original
+
 # Ignore local scratch file
 scratch.m
+
 # Ignore outputData contents
 **/outputData/*
 !outputData/.gitkeep
+
+# Ignore local input data folder & contents
+**/local/*
+
+#
 
 
 ----------
