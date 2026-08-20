@@ -6,7 +6,7 @@ function runConfig(auv, wec, energyStorage, modIn, simResults)
 % struct named 'simResults'.
 %
 % INPUTS: 
-% - auv: AUV object 
+% - auv: AUV object or array of objects
 % - wec: WEC object
 % - energyStorage: EnergyStorage object 
 % - modIn: ModelInput object containing all user-input parameters
@@ -46,6 +46,15 @@ function runConfig(auv, wec, energyStorage, modIn, simResults)
 %     'powerGenMeans',                [], ...
 %     'numWECs',                      0);
 
+% Build wec fleet if empty - ocurrs when modIn.simGoal == 1
+if isempty(simResults.wecFleet)
+    simResults.numWECs = 1;
+    simResults.wecFleet = wec;
+    updateWECAggregates(simResults, modIn, auv);
+end
+
+
+
 
 %% Fleet size calculation
 reRunSim = 1;
@@ -53,30 +62,36 @@ simAttemptNum = 0;
 while reRunSim == 1
     simAttemptNum = simAttemptNum + 1;
 
+    if simAttemptNum > 10
+        error('runConfig: Exceeded maximum retry attempts (10). Central battery repeatedly failed quality checks — check WEC generation estimates and fleet sizing logic.');
+    end
+
     if modIn.simGoal == 1
         if simAttemptNum > 1
             simResults.fleetSize = simResults.fleetSize - 1;
     
             % reset wec & auv timestep parameters
-            wec.reset();
+            % wec.reset();
+            arrayfun(@(w) w.reset(), simResults.wecFleet);
             arrayfun(@(a) a.reset(), auv); 
             energyStorage.reset();
         else
-            simResults.fleetSize = calcFleetSize(wec, auv, energyStorage, modIn.maxFleetSize);  % initial calculation
+            simResults.fleetSize = calcFleetSize(simResults, auv, energyStorage, modIn.maxFleetSize);  % initial calculation
         end
 
-    else
+    elseif modIn.simGoal == 2
         % Set AUV fleet size (given via user-input)
         simResults.fleetSize = numel(auv);
 
         % if re-running simulation, use a larger power generation
         if simAttemptNum > 1
-            newMinPwr = wec.meanPowerGen * 1.10;  % Increase power gen. by 10%
+            % newMinPwr = wec.meanPowerGen * 1.10;  % Increase power gen. by 10%
+            newMinPwr = modIn.resourceDataVars.minPowerRequired * 1.10;  % Increase power gen. requirement by 10%
             modIn.addResourceDataVar('minPowerRequired', newMinPwr);
             modIn.calcPowerGen(wec, simResults)
 
             % reset wec & auv timestep parameters
-            wec.reset();
+            arrayfun(@(w) w.reset(), simResults.wecFleet);
             arrayfun(@(a) a.reset(), auv); 
             energyStorage.reset();
         end
@@ -86,15 +101,24 @@ while reRunSim == 1
     %% Update central storage hotel load to account for additional AUV docks
     energyStorage.hotelLoad = energyStorage.baseHotelLoad + energyStorage.dockHotelLoad*(simResults.fleetSize); 
 
+    
+    %% Calculate wec fleet aggregate-power values
+    % % Pre-simulation wec fleet calculations
+    updateWECAggregates(simResults, modIn, auv);
+    % simResults.powerGenMeans = sum([simResults.wecFleet.powerGenMeans], 2);
+    % simResults.aggWECHotelLoad = sum([simResults.wecFleet.hotelLoad]./([simResults.wecFleet.n_battery].^2));
+    % simResults.meanPowerGen = mean(simResults.powerGenMeans);
+    % simResults.lowPowerGen = calcLowPowerGen(simResults, modIn, auv); %%%%%%%%%%%%%%%%%%%%%% move low power calculation to helper function
+    
+    % wec.calcLowPower(modIn.resourceDataType, modIn.dt, auv); 
+    
 
     %% Calculate minimum central battery, for battery to not limit fleet
     % Need at least enough energy saved in central battery to fully
     % recharge AUV(s), and support AUV & WEC hotel loads during
     % that time given poor power generation +~ 20% for safety.
-   
-    wec.calcLowPower(modIn.resourceDataType, modIn.dt, auv); 
-
-    lowPowerOverflow = wec.lowPowerGen -  wec.hotelLoad/(wec.n_battery^2);  % Assumes wec is already at max battery
+    lowPowerOverflow = simResults.lowPowerGen -  simResults.aggWECHotelLoad;  % Assumes wec is already at max battery
+    % lowPowerOverflow = wec.lowPowerGen -  wec.hotelLoad/(wec.n_battery^2);  % Assumes wec is already at max battery
     switch modIn.simGoal
         case 1
             minBattery = ( auv.chargeLoad*simResults.fleetSize/energyStorage.n_battery + auv.chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - lowPowerOverflow*auv.chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr  )/0.8;% *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
@@ -154,7 +178,7 @@ while reRunSim == 1
         %   - AUV must dock with at least 20% of its battery left
         %   - Minimize time when central energy storage & AUV are both at full battery
         %   - energyStorage must have enough battery to charge AUV(s) when they return
-        [simResults.energyStorageBatteryLvl, simResults.wecBatteryLvl, simResults.auvBatteryLvl, simResults.auvSchedule] = simulateSystemOps(modIn.simTime, wec, auvFleet, energyStorage, modIn.incorpStagger);
+        [simResults.energyStorageBatteryLvl, simResults.wecBatteryLvl, simResults.auvBatteryLvl, simResults.auvSchedule] = simulateSystemOps(modIn.simTime, simResults, auvFleet, energyStorage, modIn.incorpStagger);
        
         %% Post-Simulation Calcs
 
@@ -199,8 +223,11 @@ while reRunSim == 1
                 if any(simResults.energyStorageBatteryLvl < 0)
                     reRunSim = 1;
                     warning('Central battery dropped below zero. Re-running simulation with a 10% higher minimum power generation.')
-                end
-                simResults.centralBatteryCapacity = [energyStorage.batteryCapacity];
+                else
+                    reRunSim = 0; 
+
+                    simResults.centralBatteryCapacity = [energyStorage.batteryCapacity];
+                end              
         end
 
     else  % Wave resource insufficient to support deployment of AUV here
@@ -223,8 +250,40 @@ while reRunSim == 1
 end  % while fleetCalc == 1 
 
 %% Values to Track
+% 
+% simResults.meanPowerGen = wec.meanPowerGen;
+% simResults.powerGenMeans = wec.powerGenMeans;  % maybe only save power gen once if it isn't recalculated each iteration?
 
-simResults.meanPowerGen = wec.meanPowerGen;
-simResults.powerGenMeans = wec.powerGenMeans;  % maybe only save power gen once if it isn't recalculated each iteration?
+end
+
+function lowPowerGen = calcLowPowerGen(simResults, modIn, auv)
+% Calculates aggregate low power generation for the wec fleet
+% 
+% INPUTS: 
+% simResults: SimResults object with wecFleet generation values
+% modIn: ModelInput object
+% auv: AUV object 
+
+switch modIn.resourceDataType
+    case {1, 2, 4, 6}
+        chargeWindow = ceil([auv.chargeTime]./modIn.dt);
+        if numel(chargeWindow) > 1
+            chargeWindow = mean(chargeWindow);
+        end
+        tmpPwrGen = movmean(simResults.powerGenMeans, chargeWindow);
+        lowPowerGen = min(tmpPwrGen(floor(0.5*chargeWindow) : end - floor(0.5*chargeWindow)) );  % Exclude truncated means
+
+    otherwise
+        lowPowerGen = 0.75*simResults.meanPowerGen;
+end
+
+end
+
+
+function updateWECAggregates(simResults, modIn, auv)
+simResults.powerGenMeans = sum([simResults.wecFleet.powerGenMeans], 2);
+simResults.aggWECHotelLoad = sum([simResults.wecFleet.hotelLoad]./([simResults.wecFleet.n_battery].^2));
+simResults.meanPowerGen = mean(simResults.powerGenMeans);
+simResults.lowPowerGen = calcLowPowerGen(simResults, modIn, auv); %%%%%%%%%%%%%%%%%%%%%% move low power calculation to helper function
 
 end

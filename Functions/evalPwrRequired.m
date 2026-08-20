@@ -16,7 +16,7 @@ pwrToAUVs = [auv.chargeLoad]./(energyStorage.n_battery*t_c);  % averaged AUV dra
 
 eStorageHotel = energyStorage.baseHotelLoad + energyStorage.dockHotelLoad*(numel(auv));
 
-powerRequired = wec.hotelLoad/(wec.n_battery^2) + (sum(pwrToAUVs) + eStorageHotel/energyStorage.n_battery/energyStorage.n_powerTrnsfr)/(energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery);  % sum(pwrToAUVs) is the same as mean(pwrToAUVs)*numel(auv)
+powerRequired = sum([wec.hotelLoad]./([wec.n_battery].^2)) + (sum(pwrToAUVs) + eStorageHotel/energyStorage.n_battery/energyStorage.n_powerTrnsfr)/(energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery);  % sum(pwrToAUVs) is the same as mean(pwrToAUVs)*numel(auv)
 % powerRequired = (sum(pwrToAUVs) + wec.hotelLoad/(wec.n_battery^2) + eStorageHotel)/(energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery);  % sum(pwrToAUVs) is the same as mean(pwrToAUVs)*numel(auv)
 
 % hotelPower = (sum([auv.hotelLoad]./([auv.n_powerTransfer].*[auv.n_battery].*energyStorage.n_battery)) + wec.hotelLoad/(wec.n_battery^2) + eStorageHotel/energyStorage.n_battery/energyStorage.n_powerTrnsfr)/(energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery);

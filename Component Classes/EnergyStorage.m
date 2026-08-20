@@ -88,14 +88,14 @@ classdef EnergyStorage < handle
 
 
         %% Battery Estimator
-        function [eStorageFutureBattery, eStorageNoBatteryFlag] = estBattery(energyStorage, auvFleet, simTime, dt, auvToDeploy, wec)
+        function [eStorageFutureBattery, eStorageNoBatteryFlag] = estBattery(energyStorage, auvFleet, simTime, dt, auvToDeploy, simResults)
             % Estimates the central battery level at a given time
             % Inputs: 
             % - auvFleet: Array of AUV objects
             % - simTime: [hr] Current simulation time
             % - dt: [hr] Simulation timestep
             % - auvToDeploy: index of AUV to deploy in auvFleet
-            % - wec: WEC object
+            % - simResults: SimResults object containing wecFleet values
             % Outputs: 
             % - eStorageFutureBattery: Estimated energy storage battery
             %   level at the time auvToDeploy finishes charging after
@@ -138,13 +138,14 @@ classdef EnergyStorage < handle
             chargingDrawRate = (adjustedRechargeRate ./ auv_n_powerTransfer ./ auv_n_battery + hotelDrawRate);  % [W] - All auv efficiencies applied
             
             % Calculate power generation overflow during mission + charge
-            wecPwrGenFx = mean(wec.powerGenMeans(int32(simTime/dt) : int32(min(t_return/dt, length(wec.powerGenMeans))) ));
+            wecPwrGenFx = mean(simResults.powerGenMeans(int32(simTime/dt) : int32(min(t_return/dt, length(simResults.powerGenMeans))) ));
             % Slightly faster (?) than using mean() each timestep this fn is called...
             % i1 = int32(simTime/dt);
             % i2 = int32(min(t_return/dt, length(wec.powerGenMeans)));
             % wecPwrGenFx = (wec.cumPwrGen(i2+1) - wec.cumPwrGen(i1)) / (i2 - i1 +1);  
 
-            pwrOverflowRate = ( wecPwrGenFx - ( (wec.batteryCapacity - wec.battery)/(dt*wec.n_battery) + wec.hotelLoad/(wec.n_battery^2) ) ) * energyStorage.n_wecPwrTrnsfr * energyStorage.n_battery;
+            % pwrOverflowRate = ( wecPwrGenFx - ( (wec.batteryCapacity - wec.battery)/(dt*wec.n_battery) + wec.hotelLoad/(wec.n_battery^2) ) ) * energyStorage.n_wecPwrTrnsfr * energyStorage.n_battery;
+            pwrOverflowRate = ( wecPwrGenFx - ( sum(([simResults.wecFleet.batteryCapacity] - [simResults.wecFleet.battery])./(dt*[simResults.wecFleet.n_battery])) + simResults.aggWECHotelLoad ) ) * energyStorage.n_wecPwrTrnsfr * energyStorage.n_battery;
             totPwrOverflow = pwrOverflowRate * (t_return - simTime);
 
             % Account for power dumping

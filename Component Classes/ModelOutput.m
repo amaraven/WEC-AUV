@@ -18,7 +18,7 @@ classdef ModelOutput < handle
         % auvMissionLength (1,:) {mustBeNumeric}  % [hr] Could be 1x1 or 1xm depending on if mission length changes between test cases
         % ratePwrUsed (1,:) {mustBeNumeric}  % [W] Rate AUV uses power (power used during mission + recharge [Wh] / mission + recharge time [h])
         energyStorageBatteryLvl {mustBeNumeric} % [Wh] Battery level of central energy storage as a function of time with rows corresponding to time steps and columns corresponding to test cases
-        wecBatteryLvl {mustBeNumeric}  % [Wh] Battery level of WEC as a function of time with rows corresponding to time steps and columns corresponding to test cases
+        wecBatteryLvl (1,:) cell  % [Wh] Battery level of WEC as a function of time with rows corresponding to time steps and columns corresponding to test cases
         auvBatteryLvl (1,:) cell  % [Wh] Battery level of AUV(s) as a function of time. Cell array with columns corresponding to test case. Each array item is a nxm matrix with n = timesteps and m = auv number
         auvSchedule (1,:) cell  % Operational state schedule of AUV(s) as a function of time with 1) Executing AUV mission, 2) AUV recharging, 3) AUV docked & fully charged. Organized in the same manner as 'auvBatteryLvl'. 
         auvTimeOnMission (1,:) cell  % [h] Time each AUV spends 'on-mission' during the simulation. Cell array with columns corresponding to test case. Each array item is a 1xm matrix with m corresponding to the number of AUVs in fleet.

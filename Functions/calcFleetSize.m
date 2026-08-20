@@ -1,6 +1,6 @@
 % Ama Hartman - AmaH@uw.edu
 
-function fleetSize = calcFleetSize(wec, auv, energyStorage, maxFleetSize)
+function fleetSize = calcFleetSize(simResults, auv, energyStorage, maxFleetSize)
 % calcFleetNum calculates the number of AUVs that can be supported by a
 % single WEC with user-defined (or default) properties  
 %
@@ -16,7 +16,8 @@ function fleetSize = calcFleetSize(wec, auv, energyStorage, maxFleetSize)
 
 
 % Calculate power available after supporting WEC, assuming max WEC battery
-powerValue = wec.meanPowerGen - wec.hotelLoad/(wec.n_battery^2); 
+% powerValue = wec.meanPowerGen - wec.hotelLoad/(wec.n_battery^2); 
+powerValue = simResults.meanPowerGen - simResults.aggWECHotelLoad; 
 
 % Calculate MAX number of AUV's WEC could support in dock with given/calculated power generation
 maxHotelFleet = floor((powerValue*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr - energyStorage.baseHotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr) / (auv.hotelLoad / energyStorage.n_battery / auv.n_battery / auv.n_powerTransfer + energyStorage.dockHotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr));  % PowerGen - wecHotelLoad - auvHotelLoad*fleetSize > 0    

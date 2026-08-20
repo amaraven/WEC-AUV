@@ -20,5 +20,6 @@ classdef SimResults < handle
         numWECs = 0             % Number of WECs in the fleet
         wecFleet = [];          % Array of WEC objects
         aggWECHotelLoad = 0;    % Aggregate WEC fleet hotel load
+        lowPowerGen = 0         % Aggregate low power generation of the WEC fleet
     end
 end

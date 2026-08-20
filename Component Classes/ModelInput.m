@@ -180,6 +180,8 @@ classdef ModelInput < handle
                     wec.lowPowerGen = 0.75 * wec.meanPowerGen; 
                     wec.powerGenMeans = ones(size(mi.simTime)) * wec.meanPowerGen; 
 
+                    mi.sizeWECFleet(wec, simResults);
+
                 case 4 % Time series of wave specs (Hs, Te, Tp)
                     % Determine filetype, load data, & build data struct
                     [~, ~, ext] = fileparts(mi.resourceDataVars.dataFiles{depVarCount});
@@ -223,14 +225,15 @@ classdef ModelInput < handle
                     % wec.calcPowerGen(mi.resourceDataVars.waveSpecTable(depVarCount,:), [], mi.simTime, 0, 0);
                     wec.calcPowerGen(waveData, [], mi.simTime, 0, 0);
 
-                    % If input is AUV fleet, compare required power with
-                    % power generated and increase number of WECs if needed
-                    mi.sizeWECFleet(wec, simResults);
-
+                    
                     % save values
                     wec.lowPowerGen = 0.75*wec.meanPowerGen; 
                     % wec.powerGenMeans = ones(size(mi.simTime)) * wec.meanPowerGen;  % REDUNDANT - already done in WEC.calcPowerGen
                     % modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
+
+                    % If input is AUV fleet, compare required power with
+                    % power generated and increase number of WECs if needed
+                    mi.sizeWECFleet(wec, simResults);
 
                 case 6 % Power matrix & Hs, Te time series
                     % load data
@@ -253,29 +256,51 @@ classdef ModelInput < handle
             % Given the power required to support a specific AUV fleet
             % (mi.resourceDataVars.minPowerRequired), determines the number
             % of WECs needed based on calculated WEC power generation
-            % (wec.powerGenMeans) and builds the WEC fleet
+            % (wec.powerGenMeans) and builds the WEC fleet. If model goal
+            % is to input power generation and output an AUV fleet, does
+            % nothing.
 
             % If input is AUV fleet, compare required power with
             % power generated and increase number of WECs if needed
             if mi.simGoal == 2
-                numWECs = ceil(mi.resourceDataVars.minPowerRequired / wec.meanPowerGen);
+                switch mi.resourceDataType   
+                    case 0
+                        numWECs = numel(wec);
+                    case {4, 5}
+                        numWECs = ceil(mi.resourceDataVars.minPowerRequired / wec.meanPowerGen);
+                    otherwise
+                        error('sizeWECFleet: Unsupported resourceDataType (%d) for simGoal 2.', mi.resourceDataType);
+                end
 
                 % If no change in the number of WECs in fleet, no need to recompute and reassign values
-                if simResults.numWECs ~= numWECs
+                if simResults.numWECs ~= numWECs || isempty(simResults.wecFleet) || numel(simResults.wecFleet) ~= numWECs
                     simResults.numWECs = numWECs;
-
+    
                     % Build WEC fleet (homogenous)
                     simResults.wecFleet = arrayfun(@(~) WEC(wec.model, wec.charDim, wec.batteryCapacity, wec.hotelLoad, wec.n_hydro, wec.n_gen, wec.n_battery), 1:numWECs);
-                    [simResults.wecFleet.powerGenMeans] = deal(wec.powerGenMeans);  % copies existing power generation to all wecs...
-                    [simResults.wecFleet.meanPowerGen] = deal(wec.meanPowerGen);
-                    [simResults.wecFleet.lowPowerGen] = deal(wec.lowPowerGen);
-
-                    % Pre-simulation calculations
-                    simResults.powerGenMeans = sum([simResults.wecFleet.powerGenMeans], 2);
-                    simResults.aggWECHotelLoad = sum([simResults.wecFleet.hotelLoad]);
-                    simResults.meanPowerGen = mean(simResults.powerGenMeans);
-                end
                 
+                end
+
+                % Assign values
+                switch mi.resourceDataType
+                    case 0  % from calculated value of total required power generation
+                        genEfficiencies = [wec.n_hydro].*[wec.n_gen];
+                        [simResults.wecFleet.powerGenMeans] = deal(wec.powerGenMeans.*genEfficiencies/sum(genEfficiencies));  % copies existing power generation to all wecs...
+                        [simResults.wecFleet.meanPowerGen] = deal(wec.meanPowerGen.*genEfficiencies/sum(genEfficiencies));  % not used in calcs, could remove
+                        [simResults.wecFleet.lowPowerGen] = deal(wec.lowPowerGen.*genEfficiencies/sum(genEfficiencies));  % not used in calcs, could remove
+
+                    case {4, 5}  % calculated values based on wave resource
+                        [simResults.wecFleet.powerGenMeans] = deal(wec.powerGenMeans);  % copies existing power generation to all wecs...
+                        [simResults.wecFleet.meanPowerGen] = deal(wec.meanPowerGen);  % not used in calcs, could remove..
+                        [simResults.wecFleet.lowPowerGen] = deal(wec.lowPowerGen);  % not used in calcs, could remove..
+                end
+    
+                    % % Pre-simulation calculations
+                    % simResults.powerGenMeans = sum([simResults.wecFleet.powerGenMeans], 2);
+                    % simResults.aggWECHotelLoad = sum([simResults.wecFleet.hotelLoad]./([wecFleet.n_battery].^2));
+                    % simResults.meanPowerGen = mean(simResults.powerGenMeans);
+                    % simResults.aggLowPowerGen = sum([simResults.wecFleet.lowPowerGen]);
+    
                 % Old iteration
                 % prevNumWECs = simResults.numWECs;
                 % if prevNumWECs == 0
@@ -285,8 +310,8 @@ classdef ModelInput < handle
                 % wec.powerGenMeans = wec.powerGenMeans * simResults.numWECs;  % Multiply power gen. from single WEC by # required
                 % wec.modifyHotelLoad(wec.hotelLoad + (wec.hotelLoad / prevNumWECs));  % Multiply single-WEC hotel load by the number of WECs, re-write object value.
                 % wec.meanPowerGen = mean(wec.powerGenMeans);
-            end
 
+            end
         end
 
     end  % methods
