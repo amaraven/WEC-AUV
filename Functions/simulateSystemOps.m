@@ -34,8 +34,8 @@ eStorageBatteryLvl = zeros(length(simTime)+1, 1);
 % eStorageBatteryLvl(1) = min(auvFleet(1).chargeLoad*length(auvFleet)/energyStorage.n_battery + auvFleet(1).chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - ( (wec.lowPowerGen-wec.hotelLoad/(wec.n_battery^2))*auvFleet(1).chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr ), energyStorage.batteryCapacity);% *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
 eStorageBatteryLvl(1) = min(auvFleet(1).chargeLoad*length(auvFleet)/energyStorage.n_battery + auvFleet(1).chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - ( (simResults.lowPowerGen-simResults.aggWECHotelLoad)*auvFleet(1).chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr ), energyStorage.batteryCapacity);% *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
 % eStorageBatteryLvl(1) = max(0, min(auvFleet(1).chargeLoad*length(auvFleet)/energyStorage.n_battery + auvFleet(1).chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - (simResults.lowPowerGen - simResults.aggWECHotelLoad)*auvFleet(1).chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr, energyStorage.batteryCapacity));
-if eStorageBatteryLvl(1) < 0
-    eStorageBatteryLvl = 0.85*energyStorage.batteryCapacity;  % Initialize at 85% max charge if power generated is > max power draw
+if eStorageBatteryLvl(1) < 0%.25*energyStorage.batteryCapacity
+    eStorageBatteryLvl(1) = 0.85*energyStorage.batteryCapacity;  % Initialize at 85% max charge if power generated is > max power draw. Matches EnergyStorage.reset()'s default initialization.
 end
 auvSchedule = zeros(length(simTime), length(auvFleet)); 
 
@@ -43,7 +43,8 @@ auvSchedule = zeros(length(simTime), length(auvFleet));
 % Initialize AUV deployment stagger values
 if incorpStagger == 1
     % staggerHours = (auvFleet(1).missionTime+auvFleet(1).chargeTime) /length(auvFleet);  % Proportional stagger yileds even breaks in deployment 
-    staggerHours = mean( ([auvFleet.missionTime]+[auvFleet.chargeTime]) ./ length(auvFleet) );
+    staggerHours = mean( ([auvFleet.missionTime]+[auvFleet.chargeTime]) ./ length(auvFleet) );  % If fleet is diverse, results in small-auv missions delayed, and large-auv missions sometimes never even approved because a smaller AUV is always back and available first.
+    staggerHours = min( ([auvFleet.missionTime]+[auvFleet.chargeTime]) ./ length(auvFleet) );  % min should still yield the desired 'mean' for homogenous fleets...
     simTimeLastDeployment = -staggerHours; 
 else
     staggerHours = 0;
