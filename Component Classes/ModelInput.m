@@ -1,32 +1,35 @@
-% Ama Hartman
+% ModelInput defines the properties and methods saved in ModelInput 
+% objects. These objects store all inputs neededfor the power model 
+% simulation.
+%
+% User-Defined properties:
+% - simHrs: [hr] simulation duration. Default 1 wk
+% - depVar: variable to change between simulation iterations. Default
+%   'AUV Model'
+% - resourceDataType: Type of resource data. Power in W, time in h,
+%   distance in m, wave periods in s.
+%   1. Modeled power gen. of 1.5 m WEC in different sea states (1-10)
+%   2. Power generation time series and time vector (*.mat file)
+%   3. Value of mean power generation
+%   4. Time series of wave specifications (significant wave
+%   height, wave energy and peak periods, and time) (Default)
+%   5. Values of mean wave specifications
+%   6. Power matrix and wave spec. time series
+% - resourceDataVars: struct containing metadata about user-provided
+%   resource data
+% - incorpStagger: Enforce a stagger between AUV deployments. Default 1
+%   (on)
+% - maxFleetSize: Enforce a maximum AUV fleet size. Default 0 (off)
+% - userDefinedBattery: Size of user-defined central battery capacity.
+%   Default 0 (off)
+% - dtSec: timestep interval in seconds. Default 30 s
+% - auvModels: cell array containing AUV model name(s)
+% - outputPlots: Struct containing output plots selected to generate
+%
+% Ama Hartman - 2026
+
 
 classdef ModelInput < handle
-    % ModelInput defines the properties and methods saved in ModelInput
-    % objects. These objects store all inputs neededfor the power model simulation. 
-    %
-    % User-Defined properties: 
-    % - simHrs: [hr] simulation duration. Default 1 wk
-    % - depVar: variable to change between simulation iterations. Default
-    %   'AUV Model'
-    % - resourceDataType: Type of resource data. Power in W, time in h,
-    %   distance in m, wave periods in s.
-    %   1. Modeled power gen. of 1.5 m WEC in different sea states (1-10)
-    %   2. Power generation time series and time vector (*.mat file) 
-    %   3. Value of mean power generation
-    %   4. Time series of wave specifications (significant wave
-    %   height, wave energy and peak periods, and time) (Default)
-    %   5. Values of mean wave specifications 
-    %   6. Power matrix and wave spec. time series
-    % - resourceDataVars: struct containing metadata about user-provided
-    %   resource data
-    % - incorpStagger: Enforce a stagger between AUV deployments. Default 1
-    %   (on)
-    % - maxFleetSize: Enforce a maximum AUV fleet size. Default 0 (off)
-    % - userDefinedBattery: Size of user-defined central battery capacity. 
-    %   Default 0 (off)
-    % - dtSec: timestep interval in seconds. Default 30 s
-    % - auvModels: cell array containing AUV model name(s)
-    % - outputPlots: Struct containing output plots selected to generate
 
     % User-defined properties
     properties (GetAccess = public, SetAccess = private)
@@ -54,6 +57,8 @@ classdef ModelInput < handle
     methods
         %% Constructor
         function mi = ModelInput(simGoal, simHrs, depVar, resourceDataType, incorpStagger, maxFleetSize, userDefinedBattery, dtSec, auvModels, resourceDataVariables, outputPlotSelection)
+            % Generates an object with the given properties. Default values
+            % are used if no inputs are given.
             arguments
                 simGoal (1,1) {mustBeMember(simGoal, [1,2])} = 1  % default: Input power information, output AUV fleet size
                 simHrs (1,1) {mustBePositive} = (7*24)  % default: 1 wk
@@ -119,7 +124,8 @@ classdef ModelInput < handle
             % saves in simResults struct.
             % Inputs: 
             % * wec: WEC class object
-            % * simResults: Struct containing simulation results
+            % * simResults: Struct containing variables used in timestep
+            %   calculations
             % * depVarCount: (Optional) iteration of the dependent variable
             %   loop, exclude if calling from outside of the loop
             arguments
@@ -145,11 +151,6 @@ classdef ModelInput < handle
                     
                     % calc
                     wec.reshapePowerGen(RM3(seaState).Power, RM3(seaState).Time/60/60, mi.simHrs, mi.dt);  % Time must be in hours
-                    
-                    % save
-                    % power gen is saved in the GUI script after simulation
-                    % modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;  % save power gen 
-                    % modOut.dataIn.seaState(depVarCount) = seaState;  % save sea state
 
                 case 2  % Time series of power gen
                     % load data
@@ -158,9 +159,6 @@ classdef ModelInput < handle
 
                     % reshape power gen. to fit simulation timestep
                     wec.reshapePowerGen(pGen_dataTime.(mi.resourceDataVars.pwrVarName), dataTime.(mi.resourceDataVars.tVarName), mi.simHrs, mi.dt);  % Time must  be in hr
-                     
-                    % save
-                    % modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
 
                 case {0, 3}  % Value of mean power, calculated (0) or given (3)
                     switch mi.simGoal
@@ -169,11 +167,6 @@ classdef ModelInput < handle
                         case 2
                             meanPwr = mi.resourceDataVars.minPowerRequired;
                     end
-
-                    % save
-                    % if isempty(modOut.meanPowerGen)
-                        % modOut.meanPowerGen(depVarCount) = meanPwr;
-                    % end
     
                     % save for use in current sim. iteration
                     wec.meanPowerGen = meanPwr;
@@ -207,32 +200,26 @@ classdef ModelInput < handle
                     end
 
                     % calculate
-                    % wec.calcPowerGen(mi.resourceDataVars.dataTable,'meanPwr', mi.simTime, 0, 403); %% set windowOverrideIndx to 403 (and use Oregon dataset) to replicate paper results, otherwise set to 0  
                     wec.calcPowerGen(waveData,'meanPwr', mi.simTime, 0, 403); %% set windowOverrideIndx to 403 (and use Oregon dataset) to replicate paper results, otherwise set to 0  
 
                     % If input is AUV fleet, compare required power with
                     % power generated and increase number of WECs if needed
                     mi.sizeWECFleet(wec, simResults);
 
-                    % save
-                    % modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
-
                 case 5 % Mean Wave specs (Hs, Te, Tp)
                     waveData.sigWaveHeight = mi.resourceDataVars.sigWaveHeight(depVarCount); 
                     waveData.waveEnergyPeriod = mi.resourceDataVars.energyPeriod(depVarCount);
                     waveData.peakPeriod = mi.resourceDataVars.peakPeriod(depVarCount);
                     % calculate
-                    % wec.calcPowerGen(mi.resourceDataVars.waveSpecTable(depVarCount,:), [], mi.simTime, 0, 0);
                     wec.calcPowerGen(waveData, [], mi.simTime, 0, 0);
 
                     
                     % save values
                     wec.lowPowerGen = 0.75*wec.meanPowerGen; 
-                    % wec.powerGenMeans = ones(size(mi.simTime)) * wec.meanPowerGen;  % REDUNDANT - already done in WEC.calcPowerGen
-                    % modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
 
-                    % If input is AUV fleet, compare required power with
-                    % power generated and increase number of WECs if needed
+                    % If model input is AUV fleet, compare required power 
+                    % with power generated and increase number of WECs if 
+                    % needed
                     mi.sizeWECFleet(wec, simResults);
 
                 case 6 % Power matrix & Hs, Te time series
@@ -248,8 +235,8 @@ classdef ModelInput < handle
 
                      % reshape power gen
                     wec.reshapePowerGen(pGen_dataTime, dataTime, mi.simHrs, mi.dt);  %%%%%%%%%%% time must be in hr
-                    % modOut.meanPowerGen(depVarCount) = wec.meanPowerGen;
             end
+
         end  % calc power gen fn
 
         function sizeWECFleet(mi, wec, simResults)
@@ -294,25 +281,9 @@ classdef ModelInput < handle
                         [simResults.wecFleet.meanPowerGen] = deal(wec.meanPowerGen);  % not used in calcs, could remove..
                         [simResults.wecFleet.lowPowerGen] = deal(wec.lowPowerGen);  % not used in calcs, could remove..
                 end
-    
-                    % % Pre-simulation calculations
-                    % simResults.powerGenMeans = sum([simResults.wecFleet.powerGenMeans], 2);
-                    % simResults.aggWECHotelLoad = sum([simResults.wecFleet.hotelLoad]./([wecFleet.n_battery].^2));
-                    % simResults.meanPowerGen = mean(simResults.powerGenMeans);
-                    % simResults.aggLowPowerGen = sum([simResults.wecFleet.lowPowerGen]);
-    
-                % Old iteration
-                % prevNumWECs = simResults.numWECs;
-                % if prevNumWECs == 0
-                %     prevNumWECs = 1;
-                % end
-                % simResults.numWECs = ceil(mi.resourceDataVars.minPowerRequired/wec.meanPowerGen);  % Number of WECs needed to support given AUV fleet
-                % wec.powerGenMeans = wec.powerGenMeans * simResults.numWECs;  % Multiply power gen. from single WEC by # required
-                % wec.modifyHotelLoad(wec.hotelLoad + (wec.hotelLoad / prevNumWECs));  % Multiply single-WEC hotel load by the number of WECs, re-write object value.
-                % wec.meanPowerGen = mean(wec.powerGenMeans);
-
             end
-        end
+
+        end  % size wec fleet
 
     end  % methods
 end

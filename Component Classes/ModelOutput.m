@@ -1,18 +1,19 @@
+% Model Output defines the properties and methods saved in ModelOutput
+% objects. These objects store model output data, and can generate
+% plots.
+%
+% To create a ModelOutput object named modOut, use the following syntax
+% modOut = ModelOutput(simTime)
+%
 % Ama Hartman
 
 classdef ModelOutput < handle
-    % Model Output defines the properties and methods saved in ModelOutput 
-    % objects. These objects store model output data, and can generate 
-    % plots.
-    % 
-    % To create a ModelOutput object named modOut, use the following syntax
-    % modOut = ModelOutput(simTime)
+
     
     properties
         simTime (:,1) {mustBeNumeric}  % Time series vector used for simulation. Default is 1 week with 30 s timesteps   
         meanPowerGen {mustBeNumeric}  % [W] Mean value of power gen. Default is generic 1.3 kW
         powerGenMeans {mustBeNumeric}  % [W] Time series of power gen throughout simulation
-        % dataIn              % Input data specifics
         centralBatteryCapacity (1,:) {mustBeNumeric}  % Vector containing total energy storage of central battery for each simulation [Wh]
         fleetSize (1,:) {mustBeNumeric}  % (1xm) Array with number of AUVs in fleet for each test case
         % auvMissionLength (1,:) {mustBeNumeric}  % [hr] Could be 1x1 or 1xm depending on if mission length changes between test cases
@@ -33,6 +34,8 @@ classdef ModelOutput < handle
 
         %% Constructor
         function modOut = ModelOutput(simTime)
+            % Generates an object with the given properties. Default values
+            % are used if no inputs are given.
             arguments
                 simTime (:,1) {mustBeNumeric} = (30:30:(7*24*60*60))'/60/60
             end
@@ -78,7 +81,7 @@ classdef ModelOutput < handle
                hold off;
             end
 
-        end
+        end  % plot central battery tracker fn
 
 
         %% Plot AUV Battery Tracker(s)
@@ -114,7 +117,7 @@ classdef ModelOutput < handle
                 legend(string(num2cell(1:modOut.fleetSize(figNum))), "Location", "northeast");
             end
 
-        end
+        end  % plot auv battery track fn
 
 
         %% Plot Power Gen, Central Battery, AUV Battery (on same panel)
@@ -175,7 +178,7 @@ classdef ModelOutput < handle
                 linkaxes([ax1, ax2, ax3], 'x')
             end
 
-        end
+        end  % plot power track panel fn
 
 
         %% Plot Working Hours
@@ -258,7 +261,7 @@ classdef ModelOutput < handle
             scatter(xcategories, 100*totalTimeOnMission./domainTime);
             ylabel("Aggregate Working Hours Percentage");
      
-        end
+        end  % plot working hours fn
 
 
         %% Plot Battery Tracker (AUVs and Central Battery on same plot)

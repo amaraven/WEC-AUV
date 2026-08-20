@@ -1,18 +1,18 @@
-% Ama Hartman
+% AUV defines the properties and methods (functions) saved in AUV objects.
+% These objects store information on the Unmanned Underwater Vehicle's
+% properties (model ID, mass, battery capacity, endurance, charging 
+% rate, etc...), and can compute values relating to their battery level
+% and mission duration. 
+%
+% To create a AUV object named 'auv', use the following syntax. 
+% auv = AUV(model, mass, batteryCapacity, missionTime,
+%       missionBatteryUsed, hotelLoad, chargeRate, chargeMethod, 
+%       batteryRechargeThreshold, n_battery, n_powerTransfer);
+%
+% Ama Hartman - 2026
 
-%% Define Class
+
 classdef AUV < handle   
-    % AUV defines the properties and methods (functions) saved in AUV objects.
-    % These objects store information on the Unmanned Underwater Vehicle's
-    % properties (model ID, mass, battery capacity, endurance, charging 
-    % rate, etc...), and can compute values relating to their battery level
-    % and mission duration. 
-    %
-    % To create a AUV object named 'auv', use the following syntax. 
-    % auv = AUV(model, mass, batteryCapacity, missionTime,
-    %       missionBatteryUsed, hotelLoad, chargeRate, chargeMethod, 
-    %       batteryRechargeThreshold, n_battery, n_powerTransfer);
-
 
     properties (GetAccess = public, SetAccess = public)  %%%%%%%%%%%% change set access to private ? %%%%%%%%%%%%%
         % User-Defined
@@ -50,8 +50,7 @@ classdef AUV < handle
 
         %% Constructor: Creates & returns an object
         function auv = AUV(model, mass, batteryCapacity, missionTime, missionBatteryUsed, hotelLoad, chargeRate, chargeMethod, batteryRechargeThreshold, n_battery, n_powerTransfer)
-            % AUV object constructor generates an object with the given
-            % properties. Default values are used if no inputs are given.
+            % AUV object constructor generates an object with the given properties. Default values are used if no inputs are given.
             arguments
             model (1,1) string = "Default AUV"  % String containing model name
             mass (1,1) {mustBeNumeric, mustBePositive} = 100  % [kg] Mass of AUV

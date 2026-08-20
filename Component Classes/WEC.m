@@ -1,13 +1,15 @@
-% Ama Hartman 
+% WEC defines the properties and methods (functions) saved in WEC
+% objects. These objects store information on the Wave Energy
+% Converter's properties (model, etc...) and can compute values
+% relating to their energy generation and battery level.
+%
+% To create a WEC object named 'wec', use the following syntax.
+% wec = WEC(model, characteristicDimension, batteryCapacity, hotelLoad, n_hydro, n_gen, n_battery);
+%
+% Ama Hartman
+
 
 classdef WEC < handle 
-    % WEC defines the properties and methods (functions) saved in WEC 
-    % objects. These objects store information on the Wave Energy 
-    % Converter's properties (model, etc...) and can compute values 
-    % relating to their energy generation and battery level. 
-    % 
-    % To create a WEC object named 'wec', use the following syntax. 
-    % wec = WEC(model, characteristicDimension, batteryCapacity, hotelLoad, n_hydro, n_gen, n_battery);
 
     % Constants
     properties (GetAccess = public, SetAccess = private)
@@ -26,7 +28,6 @@ classdef WEC < handle
         powerGenMeans   % [W] Rate of energy generation given wave profile at simulation timesteps (mean values of power at data timesteps)
         meanPowerGen    % [W] Mean value of power generation 
         lowPowerGen     % [W] Mean of lowest generation window (window sized to accomodate AUV charging) OR 0.75% of mean for constant resource inputs
-        % cumPwrGen       % [W] Cumulative power generation starting at 0 (used for central battery estimation calculations)
     end
     
     properties (Dependent)
@@ -83,14 +84,14 @@ classdef WEC < handle
         end
 
         
-        % %% Modify hotel load - retired
+        % %% Modify hotel load - retired Aug 2026
         % function modifyHotelLoad(wec, newHotelLoad)
         %     % re-writes the hotel load of the wec object as the given value
         %     wec.hotelLoad = newHotelLoad;
         % end
 
         
-        % %% Calculate 'low power' generation threshold - retired
+        % %% Calculate 'low power' generation threshold - retired Aug 2026
         % function calcLowPower(wec, resourceDataType, dt, auv)
         %     switch resourceDataType
         %         case{1, 2, 4, 6}
@@ -151,19 +152,6 @@ classdef WEC < handle
             wec.powerGenMeans = powerDataResized; 
             wec.meanPowerGen = mean(powerDataResized);
 
-
-            % simSeconds = powerData_dt:powerData_dt:simHrs*60*60;  % Time series for length of simulation with timestep defined by wave resource data
-            % powerGenTime = simSeconds'/60/60;  % Time series corresponding to powerGen in hours
-            % 
-            % % Create vector of repeating power generation for the length of simulation.
-            % powerGen = powerData(mod(0:length(simSeconds)-1, length(powerData)) +1) * wec.n_gen;  
-            % 
-            % % Reshape power generation according to simulation timesteps
-            % powerGenReshaped = reshape(powerGen, dt/(powerGenTime(2)-powerGenTime(1)), []);
-            % wec.powerGenMeans = (mean(powerGenReshaped, 1))';  %  [W]   
-            % wec.meanPowerGen = mean(wec.powerGenMeans);  % [W]
-            % % wec.cumPwrGen = [0; cumsum(wec.powerGenMeans)];
-
         end  % power gen fn
 
 
@@ -195,7 +183,7 @@ classdef WEC < handle
 
             wecPwrGen = min(pwrGen, budalLimit);
 
-            if ~isscalar(wecPwrGen)  %all(ismember({'Year', 'Month', 'Day', 'Hour', 'Minute', 'EnergyPeriod', 'PeakPeriod', 'SignificantWaveHeight'}, waveData.Properties.VariableNames)) %%%%%%%%%%%
+            if ~isscalar(wecPwrGen)  
 
                 dataDt = waveData.dataTime(2) - waveData.dataTime(1); 
     
@@ -238,19 +226,6 @@ classdef WEC < handle
     
                 simDt = simTime(2) - simTime(1);
 
-                % if dataDt > simDt 
-                %     % Data timestep is greater than simulation timestep --> interpolate to up-sample data to simTime 
-                %     wec.powerGenMeans = interp1((dataTimeWindowed- dataDt), wecPowerGenWindowed, simTime);
-                % 
-                % elseif dataDt < simDt  % if data timestep is shorter than simulation timestep... 
-                %     % Data timestep is shorter than simulation timestep --> down-sample data to simTime
-                %     wec.powerGenMeans = reshape(wecPowerGenWindowed, simDt/dataDt, []);
-                % 
-                % else
-                %     % No resampling needed!
-                %     wec.powerGenMeans = wecPowerGenWindowed;
-                % 
-                % end
                 if dataDt ~= simDt
                     % resample to match simulation timestep
                     wec.powerGenMeans = interp1((dataTimeWindowed-dataDt), wecPowerGenWindowed, simTime, 'linear', wecPowerGenWindowed(1));
@@ -261,8 +236,6 @@ classdef WEC < handle
 
                 % Save mean value
                 wec.meanPowerGen = mean(wec.powerGenMeans); 
-
-                % wec.cumPwrGen = [0; cumsum(wec.powerGenMeans)];
 
                 if plotPwrGen == 1
                     %% Plot Power Generation during simulation window 
@@ -288,5 +261,7 @@ classdef WEC < handle
             end
 
         end  % calc power gen fn
+
     end  % Instance Methods
+    
 end  % class def

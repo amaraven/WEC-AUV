@@ -1,6 +1,3 @@
-% Ama Hartman
-
-function runConfig(auv, wec, energyStorage, modIn, simResults)
 % runConfiguration compiles and calculates all inputs needed to run the
 % model, calls runPowerModel.m to execute, and compiles outputs into a 
 % struct named 'simResults'.
@@ -11,7 +8,7 @@ function runConfig(auv, wec, energyStorage, modIn, simResults)
 % - energyStorage: EnergyStorage object 
 % - modIn: ModelInput object containing all user-input parameters
 % 
-% OUTPUT: 
+% OUTPUTS: 
 % - simResults: Struct containing the following simulation outputs: 
 %   - fleetSize: Size of AUV fleet
 %   - centralBatteryCapacity: [Wh] total capacity of the central battery
@@ -31,29 +28,17 @@ function runConfig(auv, wec, energyStorage, modIn, simResults)
 %   - auvFleet: (1xn ...) array of AUV objects
 %   - meanPowerGen: [W] mean power generation throughout simulation
 %   - powerGenMeans: [W]
+%
+% Ama Hartman
 
-% % Initialze results struct
-% simResults = struct('fleetSize',    0, ...
-%     'centralBatteryCapacity',       0, ...
-%     'energyStorageBatteryLvl',      [], ...
-%     'wecBatteryLvl',                [], ...
-%     'auvBatteryLvl',                [], ...
-%     'auvSchedule',                  [], ...
-%     'auvTimeOnMission',             0, ...
-%     'auvTimeOnMissionCorrected',    0, ...
-%     'auvFleet',                     [], ...
-%     'meanPowerGen',                 0, ...
-%     'powerGenMeans',                [], ...
-%     'numWECs',                      0);
+function runConfig(auv, wec, energyStorage, modIn, simResults)
 
-% Build wec fleet if empty - ocurrs when modIn.simGoal == 1
+%% Build wec fleet if empty (ocurrs when modIn.simGoal == 1)
 if isempty(simResults.wecFleet)
     simResults.numWECs = 1;
     simResults.wecFleet = wec;
     updateWECAggregates(simResults, modIn, auv);
 end
-
-
 
 
 %% Fleet size calculation
@@ -105,13 +90,7 @@ while reRunSim == 1
     %% Calculate wec fleet aggregate-power values
     % % Pre-simulation wec fleet calculations
     updateWECAggregates(simResults, modIn, auv);
-    % simResults.powerGenMeans = sum([simResults.wecFleet.powerGenMeans], 2);
-    % simResults.aggWECHotelLoad = sum([simResults.wecFleet.hotelLoad]./([simResults.wecFleet.n_battery].^2));
-    % simResults.meanPowerGen = mean(simResults.powerGenMeans);
-    % simResults.lowPowerGen = calcLowPowerGen(simResults, modIn, auv); %%%%%%%%%%%%%%%%%%%%%% move low power calculation to helper function
-    
-    % wec.calcLowPower(modIn.resourceDataType, modIn.dt, auv); 
-    
+       
 
     %% Calculate minimum central battery, for battery to not limit fleet
     % Need at least enough energy saved in central battery to fully
@@ -154,7 +133,7 @@ while reRunSim == 1
 
     end
 
-    % Modify central battery
+    % Modify central battery (optional toggle for analysis)
     % energyStorage.batteryCapacity = energyStorage.batteryCapacity*1.75;
 
 
@@ -192,7 +171,6 @@ while reRunSim == 1
                 
             else
                 staggerHours = mean( ([auvFleet.missionTime]+[auvFleet.chargeTime]) ./ length(auvFleet) );
-                % staggerHours = (simResults.auvFleet(1).missionTime + simResults.auvFleet(1).chargeTime) / simResults.fleetSize;
                 staggerPreliminaryTime = (simResults.fleetSize - 1) * staggerHours;
                 [~, preDomainIndx] = min(abs(modIn.simTime - staggerPreliminaryTime));
 
@@ -249,11 +227,6 @@ while reRunSim == 1
 
 end  % while fleetCalc == 1 
 
-%% Values to Track
-% 
-% simResults.meanPowerGen = wec.meanPowerGen;
-% simResults.powerGenMeans = wec.powerGenMeans;  % maybe only save power gen once if it isn't recalculated each iteration?
-
 end
 
 function lowPowerGen = calcLowPowerGen(simResults, modIn, auv)
@@ -281,6 +254,8 @@ end
 
 
 function updateWECAggregates(simResults, modIn, auv)
+% Updates WEC object parameters in wecFleet
+
 simResults.powerGenMeans = sum([simResults.wecFleet.powerGenMeans], 2);
 simResults.aggWECHotelLoad = sum([simResults.wecFleet.hotelLoad]./([simResults.wecFleet.n_battery].^2));
 simResults.meanPowerGen = mean(simResults.powerGenMeans);

@@ -1,3 +1,6 @@
+% modelStartup adds all relevant subfolders and files to the working path
+% and opens the model GUI. Run to initiate. 
+% 
 % Ama Hartman
 
 function modelStartup

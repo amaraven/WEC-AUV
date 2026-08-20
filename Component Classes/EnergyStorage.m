@@ -1,16 +1,17 @@
-% Ama Hartman
+% EnergyStorage defines the properties and methods saved in EnergyStorage 
+% objects. These objects store information on the 'central energy storage 
+% unit' properties (max battery, hotel load, efficiencies, ...) and can 
+% estimate future battery levels of the unit.
+%
+% To crate an EnergyStorage object named 'energyStorage', use the
+% following syntax:
+% energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad,
+%                 dockHotelLoad, n_battery, n_wecPowerTransfer, n_dockPowerTransfer);
+%
+% Ama Hartman - 2026
 
 %% Define Class
 classdef EnergyStorage < handle  
-    % EnergyStorage defines the properties and methods (functions) saved in
-    % EnergyStorage objects. These objects store information on the
-    % 'central energy storage unit' properties (max battery, hotel load,
-    % efficiencies, ...) and can estimate future battery levels of the unit. 
-    %
-    % To crate an EnergyStorage object named 'energyStorage', use the
-    % following syntax: 
-    % energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad,
-    %                 dockHotelLoad, n_battery, n_wecPowerTransfer, n_dockPowerTransfer);
 
     properties (GetAccess = public, SetAccess = private)
         baseHotelLoad   % [W] Hotel load of unit, excluding docks
@@ -144,7 +145,6 @@ classdef EnergyStorage < handle
             % i2 = int32(min(t_return/dt, length(wec.powerGenMeans)));
             % wecPwrGenFx = (wec.cumPwrGen(i2+1) - wec.cumPwrGen(i1)) / (i2 - i1 +1);  
 
-            % pwrOverflowRate = ( wecPwrGenFx - ( (wec.batteryCapacity - wec.battery)/(dt*wec.n_battery) + wec.hotelLoad/(wec.n_battery^2) ) ) * energyStorage.n_wecPwrTrnsfr * energyStorage.n_battery;
             pwrOverflowRate = ( wecPwrGenFx - ( sum(([simResults.wecFleet.batteryCapacity] - [simResults.wecFleet.battery])./(dt*[simResults.wecFleet.n_battery])) + simResults.aggWECHotelLoad ) ) * energyStorage.n_wecPwrTrnsfr * energyStorage.n_battery;
             totPwrOverflow = pwrOverflowRate * (t_return - simTime);
 

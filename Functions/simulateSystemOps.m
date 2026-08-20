@@ -1,6 +1,3 @@
-% Ama Hartman
-
-function [eStorageBatteryLvl, wecBatteryLvl, auvBatteryLvl, auvSchedule] = simulateSystemOps(simTime, simResults, auvFleet, energyStorage, incorpStagger)
 % simulateSystemOperations steps through each timestep for the given simulation, 
 % calculates battery levels of the WEC and all AUVs in its assigned fleet,
 % and generates an operational state schedule for the AUV(s). 
@@ -21,7 +18,11 @@ function [eStorageBatteryLvl, wecBatteryLvl, auvBatteryLvl, auvSchedule] = simul
 %   corresponding to each auv in auvFleet
 % - auvSchedule: time series of AUV operational state schedule with 1)
 %   Executing AUV mission, 2) Recharging, 3) Docked and fully charged
+%
+% Ama Hartman - 2026
 
+
+function [eStorageBatteryLvl, wecBatteryLvl, auvBatteryLvl, auvSchedule] = simulateSystemOps(simTime, simResults, auvFleet, energyStorage, incorpStagger)
 
 %% Pre-Timestep Calculations
 dt = simTime(2) - simTime(1); 
@@ -30,11 +31,8 @@ auvBatteryLvl = zeros(length(simTime), length(auvFleet));
 wecBatteryLvl = zeros(length(simTime)+1, length(simResults.wecFleet)); 
 wecBatteryLvl(1,:) = [simResults.wecFleet.batteryCapacity];  % initialize at full-charge
 eStorageBatteryLvl = zeros(length(simTime)+1, 1);
-% eStorageBatteryLvl(1) = energyStorage.batteryCapacity*0.85;  % Initialized level is 85% max
-% eStorageBatteryLvl(1) = min(auvFleet(1).chargeLoad*length(auvFleet)/energyStorage.n_battery + auvFleet(1).chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - ( (wec.lowPowerGen-wec.hotelLoad/(wec.n_battery^2))*auvFleet(1).chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr ), energyStorage.batteryCapacity);% *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
 eStorageBatteryLvl(1) = min(auvFleet(1).chargeLoad*length(auvFleet)/energyStorage.n_battery + auvFleet(1).chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - ( (simResults.lowPowerGen-simResults.aggWECHotelLoad)*auvFleet(1).chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr ), energyStorage.batteryCapacity);% *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
-% eStorageBatteryLvl(1) = max(0, min(auvFleet(1).chargeLoad*length(auvFleet)/energyStorage.n_battery + auvFleet(1).chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - (simResults.lowPowerGen - simResults.aggWECHotelLoad)*auvFleet(1).chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr, energyStorage.batteryCapacity));
-if eStorageBatteryLvl(1) < 0%.25*energyStorage.batteryCapacity
+if eStorageBatteryLvl(1) < 0.25*energyStorage.batteryCapacity
     eStorageBatteryLvl(1) = 0.85*energyStorage.batteryCapacity;  % Initialize at 85% max charge if power generated is > max power draw. Matches EnergyStorage.reset()'s default initialization.
 end
 auvSchedule = zeros(length(simTime), length(auvFleet)); 
@@ -42,8 +40,6 @@ auvSchedule = zeros(length(simTime), length(auvFleet));
 
 % Initialize AUV deployment stagger values
 if incorpStagger == 1
-    % staggerHours = (auvFleet(1).missionTime+auvFleet(1).chargeTime) /length(auvFleet);  % Proportional stagger yileds even breaks in deployment 
-    staggerHours = mean( ([auvFleet.missionTime]+[auvFleet.chargeTime]) ./ length(auvFleet) );  % If fleet is diverse, results in small-auv missions delayed, and large-auv missions sometimes never even approved because a smaller AUV is always back and available first.
     staggerHours = min( ([auvFleet.missionTime]+[auvFleet.chargeTime]) ./ length(auvFleet) );  % min should still yield the desired 'mean' for homogenous fleets...
     simTimeLastDeployment = -staggerHours; 
 else
@@ -64,16 +60,13 @@ for i = 1:length(simTime)
     % Calculate WEC battery level for next iteration & amount of power
     % generated for central battery storage
         
-    % wecBatteryLvl(i+1) = min(wecBatteryLvl(i) + (-simResults.aggWECHotelLoad + wec.powerGenMeans(i)*wec.n_battery)*dt, wec.batteryCapacity);
     wecBatteryLvl(i+1, :) = min(wecBatteryLvl(i, :) + (-wecHotelDraw + wecPowerGenMat(i, :).*wecBatteryEfficiency)*dt, wecBatteryCapacity);
     for w = 1:numel(simResults.wecFleet)
         simResults.wecFleet(w).battery = wecBatteryLvl(i, w);  % Could maybe phase out
     end
-    % pGenToWEC = ((wec.batteryCapacity - wecBatteryLvl(i)) / (dt * wec.n_battery)) + (simResults.aggWECHotelLoad);
     pGenToWEC = sum(([simResults.wecFleet.batteryCapacity] - wecBatteryLvl(i,:)) ./ (dt * [simResults.wecFleet.n_battery])) + (simResults.aggWECHotelLoad);
 
     % Calculate power overflow (to central storage)
-    % if pGenToWEC < wec.powerGenMeans(i)  
     if pGenToWEC < simResults.powerGenMeans(i)  
         extraPower = simResults.powerGenMeans(i) - pGenToWEC;
    
