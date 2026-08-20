@@ -1,9 +1,9 @@
 # WEC-AUV Power Modeling  
-Version 2.0.0
+Version 2.2.0
 
 ## Overview  
 
-This MATLAB codebase simulates power dynamics between Wave Energy Converters (WECs), fleets of Autonomous Underwater Vehicles (AUVs), and a central energy storage unit. It is designed to help users analyze interdependencies between WEC sizing, AUV mission energy requirements, and available wave energy resources. The model simulates power exchanges between system components to provide recommended configurations, including the optimal number of AUVs that can be sustainably supported and the minimum required central battery capacity, given user-defined hardware and wave resource specifications.
+This MATLAB codebase simulates power dynamics between Wave Energy Converters (WECs), fleets of Autonomous Underwater Vehicles (AUVs), and a central energy storage unit. It is designed to help users analyze interdependencies between WEC sizing, AUV mission energy requirements, and available wave energy resources. The model simulates power exchanges between system components to provide recommended configurations, including the power generation required or the optimal number of AUVs that can be sustainably supported and the minimum required central battery capacity, given user-defined hardware and wave resource specifications.
 
 The codebase is object-oriented and GUI-driven. Users configure simulation parameters, hardware specifications, power resource inputs, and execute simulation batches through a graphical interface (powerModelGUI). Internally, the GUI organizes user-inputs into class objects, prompts pre- and post-simulation calculations through the function runConfig.m, which also calls the function simulateSystemOps.m to execute timestep calculations. At each timestep, power exchanges between the WEC, central battery, and AUV(s) are resolved and AUV operational states are updated according to a set of scheduling priorities and energy availability. 
 
@@ -33,8 +33,10 @@ This tool was originally developed as part of research into sustainable autonomo
 │   ├── EnergyStorage.m         # Central energy storage component class
 │   ├── ModelInput.m            # Stores and validates all user-defined simulation parameters
 │   ├── ModelOutput.m           # Stores simulation results and generates output plots
+|   ├── SimResults.m            # Stores intermediate values used in timestep calculations
 ├── Functions/              # Utility and helper functions
 │   ├── calcFleetSize.m         # Estimates the number of AUVs the system can support
+│   ├── evalPwrRequired.m       # Evaluates the power required to support a given fleet of AUVs
 │   ├── runConfig.m             # Performs pre- and post- simulation computations
 │   ├── simulateSystemOps.m     # Executes timestep calculations to simulate system operation 
 ├── GUI/                    # Folder containing GUI script
@@ -57,6 +59,8 @@ This tool was originally developed as part of research into sustainable autonomo
 
 ## Customization  
 
+- **Simulation Goal:**  
+  Choose to calculate the number of AUVs that could be supported given power generation data OR the power required to support a given AUV fleet and system hardware.
 - **Simulation Length:**  
   Edit the simulation length in `powerModel.m` or through prompted user-inputs.  
 - **AUV Mission Scheduling:**  
@@ -76,10 +80,13 @@ This tool was originally developed as part of research into sustainable autonomo
 ## Inputs & Outputs  
 
 ### Inputs  
-- **Simulation time**  
+- **Simulation Goal**  
+    Provide power generation to output an AUV fleet OR provide an AUV fleet to output required power generation
+    
+- **Simulation Time**  
     Single value for the desired simulation length in hours  
     
-- **Simulation timestep**  
+- **Simulation Timestep**  
     Model computation timestep in seconds
 
 - **AUV Fleet Size**  
@@ -131,7 +138,7 @@ This tool was originally developed as part of research into sustainable autonomo
     Select plots to generate upon completion
 
 ### Outputs
-- Fleet size (maximum number of AUVs that can be supported by the system)  
+- AUV fleet size OR power generation requirements & WEC fleet size
 - Central battery size recommendation  
 - Example AUV mission schedule  
 - Battery level tracking for all components  
