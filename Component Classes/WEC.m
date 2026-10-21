@@ -241,6 +241,8 @@ classdef WEC < handle
                     %% Plot Power Generation during simulation window 
                     set(groot, 'defaultTextInterpreter','latex'); set(groot, 'defaultAxesTickLabelInterpreter','latex'); set(groot, 'defaultLegendInterpreter','latex');
 
+                    start = datetime(2010, 1, 1, 0, 0, 0);
+                    dataDateTimes = start + hours(waveData.dataTime);
                     if windowOverrideIndx == 0
                         tempDatetimes = interp1(dataTimeWindowed, dataDateTimes(indx-(0.5*window)+1 : indx + (0.5*window)+1), simTime);  
                     else
