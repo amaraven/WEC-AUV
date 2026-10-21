@@ -107,7 +107,7 @@ classdef AUV < handle
 
 
         %% Battery Tracker
-        function calcBatteryLvl(auv, simTime)
+        function calcBatteryLvl(auv, simTime, presetDrawRate)
             % Calculates AUV battery level at a given time (simTime)
             % assuming no changes in operational state since the last
             % battery calculation
@@ -123,71 +123,193 @@ classdef AUV < handle
             %   corresponds to the timestep saved as wec.batteryTime
             % auv.batteryTime - [hr] timestep of most recent battery level
             %   saved as battery(2)
+            % presetDrawRate - [W] AUV draw rate from central battery
+            %   during recharge. Includes AUV efficiencies and hotel load.
+            %   Overrides the set AUV recharge rate, used to slow recharge.
 
+            arguments
+                auv                             % AUV class object
+                simTime (1,1) {mustBeNumeric}   % Simulation time
+                presetDrawRate {mustBeNumeric} = []  % Draw rate to override auv's rate. Includes hotel load and auv efficiencies (battery & power transfer)
+            end
+
+            % Check draw-rate input
+            if ~isempty(presetDrawRate)  % use given draw rate
+                if presetDrawRate < 0 || ~isscalar(presetDrawRate)
+                    error('Invalid AUV draw rate.')
+                end
+            end
+            
             stateTime = simTime - auv.opState(2); 
 
+            % Evaluate battery level
+            if ~isequal(simTime, auv.batteryTime)  % If already calculated the battery level this timestep, don't calculate it again...
+                switch auv.opState(1)
+                    case 1  % AUV executing mission
+                        ratePowerUse = auv.missionBattPrcnt*auv.batteryCapacity / auv.missionTime;  % rate = Battery Wh used / time to use energy
+                        auv.battery(2) = auv.battery(1) - ratePowerUse*stateTime;
+                    
+                    case 2  % AUV docked & recharging
+                        if ~isempty(presetDrawRate)
+                            % Calculate recharge rate from draw override
+                            newLinRecharge = presetDrawRate*auv.n_powerTransfer*auv.n_battery - auv.hotelLoad;
+                            if newLinRecharge < 0
+                                error('Nonphysical recharge rate calculated for the %s auv.', auv.model);
+                            end
+
+                            % Calculate battery level using given draw rate & recalculate opTimeComplete
+                            dt = simTime - auv.batteryTime;  % timestep between this and the previous battery calculation (executed each timestep, so this is equal to the simulation timestep)
+                            auv.battery(2) = auv.battery(2) + newLinRecharge*dt;
+    
+                            % Calculate new draw rate
+                            remainingRecharge = auv.batteryCapacity - auv.battery(2);
+    
+                            if remainingRecharge < 0  % pulled more energy from central battery than needed for AUV recharge, oops
+                                warning("%s Wh of energy lost due to an attempted AUV overcharge. Central battery c-rate is too low for regular operation of this system.", num2str(abs(remainingRecharge)))
+                                auv.battery(2) = auv.batteryCapacity;
+    
+                            elseif remainingRecharge == 0  % pulled just enough energy to become fully-charged yay
+    
+                            elseif remainingRecharge >= 0.2*auv.batteryCapacity  % still in the linear recharge region
+                                t_80 = ((0.8*auv.batteryCapacity) - auv.battery(2)) / auv.chargeRate; 
+                                t_full = t_80 + (0.4*auv.batteryCapacity / auv.chargeRate);
+        
+                                auv.opTimeComplete = simTime + t_full; 
+    
+                            else  % remainingRecharge < 0.2*auv.batteryCapacity so in nonlinear charging slowdown region
+                                t_current = (0.4*auv.batteryCapacity / auv.chargeRate)*(1 - sqrt( 1+ (4*auv.batteryCapacity - 5*auv.battery(2))/auv.batteryCapacity ) );  
+                                t_full = (0.4*auv.batteryCapacity / auv.chargeRate);  % not adding t_80 because built into battery charge equation (> 80%) t_80 coincides with 0
+    
+                                auv.opTimeComplete = simTime + (t_full - t_current);
+                            end
+    
+                        else
+                            % Calculate battery level using auv charge-curve
+                            tempBattery = NaN;  
+                            rateLinPowerTransfer = auv.chargeRate;  % rate of charge in linear region (up to 80%) (no efficiencies applied yet)
+                            
+                            % Linear region
+                            if auv.battery(2) < (0.8*auv.batteryCapacity) 
+                                tempBattery = auv.battery(2) + rateLinPowerTransfer*(simTime - auv.batteryTime);
+                            end
+                            
+                            % Charge > 80% region
+                            if (0.8*auv.batteryCapacity) <= auv.battery(2) || (0.8*auv.batteryCapacity) < tempBattery    % last battery calc'd is > 80% or temp battery just calc'd is > 80%
+        
+                                if (0.8*auv.batteryCapacity) < tempBattery
+                                    t_80 = (0.8*auv.batteryCapacity - auv.battery(2))/rateLinPowerTransfer + auv.batteryTime;  % 80% charge in simulation time
+                                    t_newBatteryCalc = simTime - t_80;  % Time for calculation in >80% charge curve (relative to 80% Batt at t = 0)
+        
+                                else
+                                    % Calc. time corresponding to the last-calculated battery level (t_current)
+                                    t_current = (0.4*auv.batteryCapacity / rateLinPowerTransfer)*(1 - sqrt( 1+ (4*auv.batteryCapacity - 5*auv.battery(2))/auv.batteryCapacity ) );  
+                                    dt = simTime - auv.batteryTime; 
+                                    if dt < 0 
+                                        error('dt outside of expected range during auv battery calculation')
+                                    end
+            
+                                    t_newBatteryCalc = t_current + dt;
+                                    
+                                end
+                                t_100 = 0.4*auv.batteryCapacity/rateLinPowerTransfer;
+        
+                                if t_newBatteryCalc >= t_100
+                                    auv.battery(2) = auv.batteryCapacity;
+        
+                                else
+                                    auv.battery(2) = rateLinPowerTransfer*( t_newBatteryCalc - (rateLinPowerTransfer*t_newBatteryCalc^2 / (0.8*auv.batteryCapacity)) ) + 0.8*auv.batteryCapacity;
+    
+                                end
+        
+                            else  % Battery calculation stays in linear region
+                                auv.battery(2) = tempBattery; 
+        
+                            end
+                        end
+    
+                    case 3  % AUV battery full or central battery in low power mode (recharging itself while supporting auv hotel needs)
+    
+                    otherwise
+                        error("Unknown AUV operational state.")
+                
+                end  % operational cases
+            end
+
+            % Calculate Draw Rate
             switch auv.opState(1)
                 case 1  % AUV executing mission
-                    ratePowerUse = auv.missionBattPrcnt*auv.batteryCapacity / auv.missionTime;  % rate = Battery Wh used / time to use energy
-                    auv.battery(2) = auv.battery(1) - ratePowerUse*stateTime;
-
                     newBatteryDraw = 0; 
                 
                 case 2  % AUV docked & recharging
-                    tempBattery = NaN;  
-                    rateLinPowerTransfer = auv.chargeRate;  % rate of charge in linear region (up to 80%) (no efficiencies applied yet)
-                    
-                    % Linear region
-                    if auv.battery(2) < (0.8*auv.batteryCapacity) 
-                        tempBattery = auv.battery(2) + rateLinPowerTransfer*(simTime - auv.batteryTime);
-                    end
-                    
-                    % Charge > 80% region
-                    if (0.8*auv.batteryCapacity) <= auv.battery(2) || (0.8*auv.batteryCapacity) < tempBattery    % last battery calc'd is > 80% or temp battery just calc'd is > 80%
+                    if ~isempty(presetDrawRate)
+                        if remainingRecharge < 0  % pulled more energy from central battery than needed for AUV recharge, oops
+                            newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;
 
-                        if (0.8*auv.batteryCapacity) < tempBattery
-                            t_80 = (0.8*auv.batteryCapacity - auv.battery(2))/rateLinPowerTransfer + auv.batteryTime;  % 80% charge in simulation time
-                            t_newBatteryCalc = simTime - t_80;  % Time for calculation in >80% charge curve (relative to 80% Batt at t = 0)
+                        elseif remainingRecharge == 0  % pulled just enough energy to become fully-charged yay
+                            newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;
 
-                        else
-                            % Calc. time corresponding to the last-calculated battery level (t_current)
-                            t_current = (0.4*auv.batteryCapacity / rateLinPowerTransfer)*(1 - sqrt( 1+ (4*auv.batteryCapacity - 5*auv.battery(2))/auv.batteryCapacity ) );  
-                            dt = simTime - auv.batteryTime; 
-                            if dt < 0 
-                                error('dt outside of expected range during auv battery calculation')
-                            end
-    
+                        elseif remainingRecharge >= 0.2*auv.batteryCapacity  % still in the linear recharge region
+                            newBatteryDraw = (auv.chargeRate + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery * ones(length(stateTime), 1);  % [W]
+
+                        else  % remainingRecharge < 0.2*auv.batteryCapacity so in nonlinear charging slowdown region
                             t_newBatteryCalc = t_current + dt;
-                            
+                            newBatteryDraw = (auv.chargeRate.*( 1 - auv.chargeRate*t_newBatteryCalc/(0.4*auv.batteryCapacity) ) + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery;  % [W] (d/dt of above + hotel load)
+
                         end
-                            t_100 = 0.4*auv.batteryCapacity/rateLinPowerTransfer;
+
+                    else  
+                        if isequal(simTime, auv.batteryTime)
+                            tempBattery = NaN;  
+                            rateLinPowerTransfer = auv.chargeRate;  % rate of charge in linear region (up to 80%) (no efficiencies applied yet)
+                            
+                            % Linear region
+                            if auv.battery(2) < (0.8*auv.batteryCapacity) 
+                                tempBattery = auv.battery(2) + rateLinPowerTransfer*(simTime - auv.batteryTime);
+                            end
+
+                        end
+                        
+                        % Charge > 80% region
+                        if (0.8*auv.batteryCapacity) <= auv.battery(2) || (0.8*auv.batteryCapacity) < tempBattery    % last battery calc'd is > 80% or temp battery just calc'd is > 80%
+                            if (0.8*auv.batteryCapacity) < tempBattery
+                                t_80 = (0.8*auv.batteryCapacity - auv.battery(2))/rateLinPowerTransfer + auv.batteryTime;  % 80% charge in simulation time
+                                t_newBatteryCalc = simTime - t_80;  % Time for calculation in >80% charge curve (relative to 80% Batt at t = 0)
     
+                            else
+                                % Calc. time corresponding to the last-calculated battery level (t_current)
+                                t_current = (0.4*auv.batteryCapacity / rateLinPowerTransfer)*(1 - sqrt( 1+ (4*auv.batteryCapacity - 5*auv.battery(2))/auv.batteryCapacity ) );  
+                                dt = simTime - auv.batteryTime; 
+                                if dt < 0 
+                                    error('dt outside of expected range during auv battery calculation')
+                                end
+        
+                                t_newBatteryCalc = t_current + dt;
+                                
+                            end
+                            t_100 = 0.4*auv.batteryCapacity/rateLinPowerTransfer;
+                            
                             if t_newBatteryCalc >= t_100
-                                auv.battery(2) = auv.batteryCapacity;
                                 newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;
     
                             else
-                                auv.battery(2) = rateLinPowerTransfer*( t_newBatteryCalc - (rateLinPowerTransfer*t_newBatteryCalc^2 / (0.8*auv.batteryCapacity)) ) + 0.8*auv.batteryCapacity;
                                 newBatteryDraw = (rateLinPowerTransfer.*( 1 - rateLinPowerTransfer*t_newBatteryCalc/(0.4*auv.batteryCapacity) ) + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery;  % [W] (d/dt of above + hotel load)
 
                             end
-
-                    else  % Battery calculation stays in linear region
-                        auv.battery(2) = tempBattery; 
-                        newBatteryDraw = (rateLinPowerTransfer + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery * ones(length(stateTime), 1);  % [W]
-
+    
+                        else  % Battery calculation stays in linear region
+                            newBatteryDraw = (rateLinPowerTransfer + auv.hotelLoad) / auv.n_powerTransfer /auv.n_battery * ones(length(stateTime), 1);  % [W]
+    
+                        end
                     end
 
                 case 3  % AUV battery full or central battery in low power mode (recharging itself while supporting auv hotel needs)
                     newBatteryDraw = auv.hotelLoad / auv.n_powerTransfer / auv.n_battery;  % Drawing enough from central battery to supply hotel load 
-
-                otherwise
-                    error("Unknown AUV operational state.")
             
-            end  % operational cases
+            end  % draw rate calc
             
             % Update AUV object properties
             auv.batteryTime = simTime; 
+
             if abs(newBatteryDraw - auv.wecBatteryDraw) > 0.01
                 auv.wecBatteryDraw = newBatteryDraw; 
             end

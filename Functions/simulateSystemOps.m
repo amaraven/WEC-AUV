@@ -28,8 +28,9 @@ function [eStorageBatteryLvl, wecBatteryLvl, auvBatteryLvl, auvSchedule] = simul
 dt = simTime(2) - simTime(1); 
 
 auvBatteryLvl = zeros(length(simTime), length(auvFleet)); 
+auvBatteryLvl(1,:) = [auvFleet.batteryCapacity];  % initialize at full charge
 wecBatteryLvl = zeros(length(simTime)+1, length(simResults.wecFleet)); 
-wecBatteryLvl(1,:) = [simResults.wecFleet.batteryCapacity];  % initialize at full-charge
+wecBatteryLvl(1,:) = [simResults.wecFleet.batteryCapacity];  % initialize at full charge
 eStorageBatteryLvl = zeros(length(simTime)+1, 1);
 eStorageBatteryLvl(1) = min(auvFleet(1).chargeLoad*length(auvFleet)/energyStorage.n_battery + auvFleet(1).chargeTime*energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - ( (simResults.lowPowerGen-simResults.aggWECHotelLoad)*auvFleet(1).chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr ), energyStorage.batteryCapacity);% *1.05;  % Given lowest possible power generation during recharge OR 5% of WEC battery, if threshold is negative (i.e. if power gen > power draw)
 if eStorageBatteryLvl(1) < 0.25*energyStorage.batteryCapacity
@@ -37,6 +38,11 @@ if eStorageBatteryLvl(1) < 0.25*energyStorage.batteryCapacity
 end
 auvSchedule = zeros(length(simTime), length(auvFleet)); 
 
+if energyStorage.cRate == 0
+    battDrawRateLimit = Inf;
+else
+    battDrawRateLimit = energyStorage.batteryCapacity * energyStorage.cRate;
+end
 
 % Initialize AUV deployment stagger values
 if incorpStagger == 1
@@ -53,10 +59,13 @@ wecBatteryEfficiency = [simResults.wecFleet.n_battery];
 wecHotelDraw = [simResults.wecFleet.hotelLoad]./ (wecBatteryEfficiency.^2);
 wecPowerGenMat = [simResults.wecFleet.powerGenMeans];
 
+% Initialize flag(s)
+overdrawingFlag = 0;
+
 %% Run timestep calculations
 for i = 1:length(simTime)  
 
-    %% WEC Battery & Power Gen Overflow
+    %% WEC Battery (i+1) & Power Gen Overflow 
     % Calculate WEC battery level for next iteration & amount of power
     % generated for central battery storage
         
@@ -64,7 +73,7 @@ for i = 1:length(simTime)
     for w = 1:numel(simResults.wecFleet)
         simResults.wecFleet(w).battery = wecBatteryLvl(i, w);  % Could maybe phase out
     end
-    pGenToWEC = sum(([simResults.wecFleet.batteryCapacity] - wecBatteryLvl(i,:)) ./ (dt * [simResults.wecFleet.n_battery])) + (simResults.aggWECHotelLoad);
+    pGenToWEC = sum((wecBatteryCapacity - wecBatteryLvl(i,:)) ./ (dt * wecBatteryEfficiency)) + (simResults.aggWECHotelLoad);
 
     % Calculate power overflow (to central storage)
     if pGenToWEC < simResults.powerGenMeans(i)  
@@ -81,38 +90,102 @@ for i = 1:length(simTime)
     end
 
 
-    %% Extract current auv operational states for calculations
+    %% Extract current (i) auv operational states for calculations
     auvOpStates = [auvFleet.opState];
     auvOpStates = auvOpStates(1:2:end);  % collect current operational state, not time associated with it
 
-    
-    %% Central storage battery
+
+    %% Central storage battery (i+1)
     % Calculate energy storage battery level for next iteration using avg
     % power and opState(s) at current simTime
     
+    currentAUVDraw = [auvFleet.wecBatteryDraw];
     % If >= 100% charged, dumps extra power and keeps battery at max
-    eStorageBatteryLvl(i+1) =      min(eStorageBatteryLvl(i) + (extraPower*energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery + - energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - sum([auvFleet.wecBatteryDraw])/energyStorage.n_battery )*dt, energyStorage.batteryCapacity);  % [prev.battery + (draws & gains)*dt]
+    eStorageBatteryLvl(i+1) =      min(eStorageBatteryLvl(i) + (extraPower*energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery + - energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - sum(currentAUVDraw)/energyStorage.n_battery )*dt, energyStorage.batteryCapacity);  % [prev.battery + (draws & gains)*dt]
     eStorageLowBatteryFlag = 0;
     
     % If central battery is low, stop charging AUVs but still supply hotel loads
     if eStorageBatteryLvl(i+1) < energyStorage.lowBatteryLvl
         eStorageLowBatteryFlag = 1;
         eStorageBatteryLvl(i+1) =  min(eStorageBatteryLvl(i) + (extraPower*energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery + - energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - sum( (auvOpStates == 3 | auvOpStates == 2) .* [auvFleet.hotelLoad] ./ [auvFleet.n_powerTransfer] ./ [auvFleet.n_battery]) /energyStorage.n_battery )*dt, energyStorage.batteryCapacity);  % [prev.battery + (draws & gains)*dt]
+    
+        % Stop charging AUVs starting timestep i (change auv.opState(i) from 2 --> 3) (for battery(i+1) calc. below)
+        indxCharging = find(auvOpStates == 2);
+        if any(indxCharging)
+            for k = 1:length(indxCharging)
+                auvFleet(indxCharging(k)).changeOpState(3, simTime(i));
+            end
+        end
+    end
+
+    % Check against rate limit 
+    rate = (eStorageBatteryLvl(i+1) - eStorageBatteryLvl(i))/dt;
+    newAUVDraw = [];
+    % pwrDiff = (eStorageBatteryLvl(i+1) - eStorageBatteryLvl(i))/dt - battDrawRateLimit;  % if (pwrDiff <= 0) then power draw is within limits, if (pwrDiff > 0): power is overdrawn by pwrDiff
+    if rate < -battDrawRateLimit  % over-discharging central battery
+        overdrawingFlag = 1;
+        pwrDiff = abs(rate) - battDrawRateLimit;  % Positive magnitude of excess discharge
+        indxCharging = find(auvOpStates == 2);
+
+        if eStorageLowBatteryFlag == 1 || ~any(indxCharging)  % If energy storage battery lvl is low (no AUVs are recharging) OR no AUVs are recharging, then the c-rate is too low for the system hotel loads... 
+            warning('System hotel loads violate the central battery c-rate. Try again with a larger central battery or higher c-rate.')
+            %%%%%%%%%%%%%%% add flag to redo simulation w/ larger central battery (stop simulation calcs, return to runConfig & try again w/ larger battery)
+
+        else
+            % Calculate new AUV recharge rates
+            newAUVDraw = currentAUVDraw;  % Non-charging AUVs keep their current draw (hotel load or none)
+            newAUVDraw(indxCharging) = currentAUVDraw(indxCharging) - (currentAUVDraw(indxCharging) * pwrDiff*energyStorage.n_battery / sum(currentAUVDraw(indxCharging)));
+
+            % Add catch for if newAUVDraw < hotel loads of docked AUVs 
+            hotelOnlyDraw = (auvOpStates == 3 | auvOpStates == 2) .* [auvFleet.hotelLoad] ./ [auvFleet.n_powerTransfer] ./ [auvFleet.n_battery];
+            if sum(newAUVDraw) < sum(hotelOnlyDraw)  % if new draw is less than the AUV hotel loads, set draw at hotel loads, pause AUV recharge
+                oldAUVDraw = newAUVDraw;  
+                newAUVDraw = hotelOnlyDraw;
+                clear hotelOnlyDraw  % clear unused variable
+
+                warning('System hotel loads violate the central battery c-rate by %s W. Try again with a larger central battery or higher c-rate.', num2str(max(newAUVDraw - oldAUVDraw)) );
+                clear oldAUVDraw  % just used for warning
+
+                % Stop charging docked AUVs during current timestep
+                for k = 1:length(indxCharging)
+                    auvFleet(indxCharging(k)).changeOpState(3, simTime(i));
+                end
+
+            end
+             
+            % Apply new AUV recharge rate to eStorageBatteryLvl(i+1) calc
+            eStorageBatteryLvl(i+1) = min(eStorageBatteryLvl(i) + (extraPower*energyStorage.n_wecPwrTrnsfr*energyStorage.n_battery + - energyStorage.hotelLoad/energyStorage.n_battery/energyStorage.n_powerTrnsfr - sum(newAUVDraw)/energyStorage.n_battery )*dt, energyStorage.batteryCapacity);  % [prev.battery + (draws & gains)*dt]
+        end
+        
+    elseif rate > battDrawRateLimit  % over-charging central battery
+        % WEC power curtailment / shedding
+        eStorageBatteryLvl(i+1) = eStorageBatteryLvl(i) + battDrawRateLimit*dt; 
+        warning('Central battery charging rate exceeds c-rate limit. Excess power discarded.')
+
+    else
+        overdrawingFlag = 0;
     end
 
     % Save current battery level in energy storage object (for battery estimation calcs)
     energyStorage.battery = eStorageBatteryLvl(i+1);  
 
     
-    %% AUV Battery
-    % Calculate and save AUV battery level(s)
-    for j = 1:length(auvFleet)
-        auvFleet(j).calcBatteryLvl(simTime(i));
-        auvBatteryLvl(i, j) = auvFleet(j).battery(2);  % Extract current battery lvl
+    %% AUV Battery (i+1)
+    % Calculate and save AUV battery level(s) from i --> i+1 timestep using current auv opState draws
+    if i < length(simTime)
+        for j = 1:length(auvFleet)
+            if ~isempty(newAUVDraw)  %overdrawingFlag == 1 && ~eStorageLowBatteryFlag && auvOpStates(j) == 2  % If energy storage battery is also low, no AUVs are charging, so no need for a newAUVDraw...
+                % Calculate battery level using new draw rate for (i --> i+1) timestep. If draw rate = hotel load (pausing recharge), newAUVDraw is ignored in calcBatteryLvl() as the auv does not gain charge.
+                auvFleet(j).calcBatteryLvl(simTime(i+1), newAUVDraw(j))
+            else
+                auvFleet(j).calcBatteryLvl(simTime(i+1));
+            end
+            auvBatteryLvl(i+1, j) = auvFleet(j).battery(2);  % Extract and save battery lvl
+        end
     end
     
-
-    %% AUV Operational State
+    
+    %% AUV Operational State (i+1)
     % Evaluate opState of AUV(s) & change as applicable for next timestep
 
     % Save current timestep operational states (calculated at the end of
@@ -125,15 +198,10 @@ for i = 1:length(simTime)
     
         % If central storage goes into battery-save mode, stop charging AUV(s)
         if eStorageLowBatteryFlag == 1
-            indxCharging = find(auvOpStates == 2);
-            if any(indxCharging)
-                for k = 1:length(indxCharging)
-                    auvFleet(indxCharging(k)).changeOpState(3, simTime(i+1));
-                end
-            end
+            % Do nothing, charging AUV's already stopped charging timestep i
     
-        else  % start charging auv's docked and still below max battery
-            indxNeedCharge = find(logical( (auvOpStates == 3) .* (auvBatteryLvl(i,:) < [auvFleet.batteryCapacity]) ));   
+        else  % start charging any auv's docked and still below max battery
+            indxNeedCharge = find(logical( (auvSchedule(i,:) == 3) .* (auvBatteryLvl(i,:) < [auvFleet.batteryCapacity]) ));   
             if any(indxNeedCharge)
                 for l = 1:length(indxNeedCharge)
                     auvFleet(indxNeedCharge(l)).changeOpState(2, simTime(i+1));
@@ -143,7 +211,7 @@ for i = 1:length(simTime)
         end
     
         % Deployed AUV completes mission & returns
-        onMissionLogic = (auvOpStates == 1);
+        onMissionLogic = (auvSchedule(i,:) == 1);
         indxMissionComplete = find(logical( onMissionLogic .* ([auvFleet.opTimeComplete] <= simTime(i+1)) ));
         if any(indxMissionComplete)
             for m = 1:length(indxMissionComplete)
@@ -152,7 +220,7 @@ for i = 1:length(simTime)
         end
     
         % Charging AUV finishes charging: 
-        indxChargingComplete = find(logical( (auvOpStates == 2) .* ([auvFleet.opTimeComplete] <= simTime(i+1)) ));
+        indxChargingComplete = find(logical( (auvSchedule(i,:) == 2) .* ([auvFleet.opTimeComplete] <= simTime(i+1)) )); 
         if any(indxChargingComplete)
             for n = 1:length(indxChargingComplete)
                 auvFleet(indxChargingComplete(n)).changeOpState(3, simTime(i+1));
@@ -167,7 +235,7 @@ for i = 1:length(simTime)
         for o = 1:length(auvFleet)
             tempMissionBattUsed(o) = auvFleet(o).missionBattPrcnt; 
         end
-        auvReadyToDeploy = (auvOpStates ~= 1) .* (auvBatteryLvl(i,:) >= (([auvFleet.rechargeThreshold] + tempMissionBattUsed) .* [auvFleet.batteryCapacity]) ); % cellfun(@(auv) (auv.rechargeThreshold + auv.missionBattPrcnt) * auv.batteryCapacity, auvFleet) );  
+        auvReadyToDeploy = (auvSchedule(i,:) ~= 1) .* (auvBatteryLvl(i,:) >= (([auvFleet.rechargeThreshold] + tempMissionBattUsed) .* [auvFleet.batteryCapacity]) ); % cellfun(@(auv) (auv.rechargeThreshold + auv.missionBattPrcnt) * auv.batteryCapacity, auvFleet) );  
         if any(auvReadyToDeploy ~= 0) && (simTime(i+1) > simTimeLastDeployment+staggerHours)
         % if any(auvReadyToDeploy ~= 0) 
             nonzroindx = find(auvReadyToDeploy); 

@@ -25,6 +25,7 @@ classdef EnergyStorage < handle
         battery         % [Wh] Current battery level 
         batteryCapacity % [Wh] Total energy storage onboard 
         hotelLoad       % [W] Total baseline power usage of hardware (unit + AUV dock(s)). Defaults to base + 1 dock
+        cRate           % [1/hr] C-Rate of the battery 
     end
 
     properties (Dependent)
@@ -35,7 +36,7 @@ classdef EnergyStorage < handle
     methods
 
         %% Constructor: Creates & returns an EnergyStorage object
-        function energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad, dockHotelLoad, n_battery, n_wecPowerTransfer, n_dockPowerTransfer)
+        function energyStorage = EnergyStorage(batteryCapacity, baseHotelLoad, dockHotelLoad, n_battery, n_wecPowerTransfer, n_dockPowerTransfer, cRate)
             % EnergyStorage object constructor generates an object with the given
             % properties. Default values are used if no inputs are given.
             arguments
@@ -45,6 +46,7 @@ classdef EnergyStorage < handle
                 n_battery (1,1) {mustBeNumeric,  mustBeInRange(n_battery, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Battery efficiency
                 n_wecPowerTransfer (1,1) {mustBeNumeric,  mustBeInRange(n_wecPowerTransfer, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Power transfer efficiency between the WEC & central battery
                 n_dockPowerTransfer (1,1) {mustBeNumeric,  mustBeInRange(n_dockPowerTransfer, 0, 1, 'exclude-lower')} = 0.9  % [0.XX] Power transfer efficiency between the central battery and docks
+                cRate (1,1) {mustBeNumeric, mustBeInRange(cRate, 0, 1)} = 0  % [0.XX] [1/hr] C-Rate of the central battery such that abs(C*batteryCapacity) = max rate of charge/discharge. If 0, no limit on charge/discharge rate.
             end
 
             energyStorage.batteryCapacity = batteryCapacity; 
@@ -53,6 +55,7 @@ classdef EnergyStorage < handle
             energyStorage.n_battery = n_battery;
             energyStorage.n_wecPwrTrnsfr = n_wecPowerTransfer;
             energyStorage.n_powerTrnsfr = n_dockPowerTransfer;
+            energyStorage.cRate = cRate;
 
             % Default hotel load = base + 1 dock
             energyStorage.hotelLoad = energyStorage.baseHotelLoad + energyStorage.dockHotelLoad;  % Default value assumes 1 AUV

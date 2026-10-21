@@ -115,6 +115,17 @@ while reRunSim == 1
         end
     end
 
+    % Check against c-rate 
+    if energyStorage.cRate ~= 0
+        [maxHotelLoad, maxChargingLoad] = evalSystLoads(modIn, auv, simResults.fleetSize, energyStorage);
+        maxSystLoad = max(maxHotelLoad, maxChargingLoad);
+        maxBattLoad = abs(maxSystLoad - lowPowerOverflow*auv.chargeTime*energyStorage.n_battery*energyStorage.n_wecPwrTrnsfr);
+        
+        if minBattery*energyStorage.cRate < maxBattLoad
+            minBattery = maxBattLoad / energyStorage.cRate;
+        end
+    end
+
     % Set central battery capacity
     if modIn.userDefinedBattery == 0  
         % No user-defined battery, set capacity to calculated minimum needed for AUV fleet
@@ -137,7 +148,7 @@ while reRunSim == 1
     % energyStorage.batteryCapacity = energyStorage.batteryCapacity*1.75;
 
 
-    % Build fleet & run model if possible
+    %% Build fleet & run model if possible
     if simResults.fleetSize > 0
 
         % Build fleet
@@ -170,7 +181,7 @@ while reRunSim == 1
                 simResults.auvTimeOnMissionCorrected = simResults.auvTimeOnMission;
                 
             else
-                staggerHours = mean( ([auvFleet.missionTime]+[auvFleet.chargeTime]) ./ length(auvFleet) );
+                staggerHours = min( ([auvFleet.missionTime]+[auvFleet.chargeTime]) ./ length(auvFleet) );
                 staggerPreliminaryTime = (simResults.fleetSize - 1) * staggerHours;
                 [~, preDomainIndx] = min(abs(modIn.simTime - staggerPreliminaryTime));
 
